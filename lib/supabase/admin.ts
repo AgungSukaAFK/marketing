@@ -7,9 +7,18 @@ import { createClient } from "@supabase/supabase-js";
  * diimpor dari komponen client.
  */
 export function createAdminClient() {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY belum di-set");
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, {
+  const url = env("NEXT_PUBLIC_SUPABASE_URL");
+  const key = env("SUPABASE_SERVICE_ROLE_KEY");
+  return createClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+}
+
+/** Env wajib & harus ASCII — karakter salin-tempel (mis. "›") memicu error ByteString di header fetch. */
+function env(name: string) {
+  const v = process.env[name]?.trim();
+  if (!v) throw new Error(`${name} belum di-set`);
+  const bad = [...v].findIndex((c) => c.charCodeAt(0) > 127);
+  if (bad !== -1) throw new Error(`${name} berisi karakter tidak valid di posisi ${bad} — salin ulang nilainya`);
+  return v;
 }

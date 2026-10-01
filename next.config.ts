@@ -22,6 +22,11 @@ const csp = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Foto landing page (Unsplash License — bebas dipakai, tanpa atribusi wajib).
+  // Disajikan lewat /_next/image sehingga CSP img-src 'self' tetap cukup.
+  images: {
+    remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com", pathname: "/photo-**" }],
+  },
   async headers() {
     return [
       {
