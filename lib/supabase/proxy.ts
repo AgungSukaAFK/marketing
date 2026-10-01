@@ -5,11 +5,25 @@ const PUBLIC_PATHS = ["/login", "/register", "/forgot", "/auth"];
 
 /** Refresh sesi Supabase di setiap request + redirect dasar (login/non-login). */
 export async function updateSession(request: NextRequest) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // Tanpa env, createServerClient akan throw → 500 polos di semua halaman. Tampilkan pesan jelas.
+  if (!url || !anonKey) {
+    return new NextResponse(
+      "<!doctype html><meta charset=utf-8><title>Konfigurasi belum lengkap</title>" +
+        "<body style='font-family:system-ui;padding:2rem;background:#060913;color:#e2e8f0'>" +
+        "<h1>Konfigurasi Supabase belum di-set</h1>" +
+        "<p>Set <code>NEXT_PUBLIC_SUPABASE_URL</code>, <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> dan " +
+        "<code>SUPABASE_SERVICE_ROLE_KEY</code> di environment, lalu deploy ulang.</p></body>",
+      { status: 500, headers: { "content-type": "text/html; charset=utf-8" } },
+    );
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       cookies: {
         getAll() {
