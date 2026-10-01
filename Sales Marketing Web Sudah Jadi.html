@@ -1,0 +1,2187 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>TITAN APEX V4 — Industrial & Mining CRM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500&family=Space+Grotesk:wght@500;700&family=Manrope:wght@500;700&family=Outfit:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --accent: #10b981;
+        --accent2: #34d399;
+        --font: "Inter", sans-serif;
+      }
+      * {
+        font-family: var(--font);
+        transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      body {
+        background: #060913;
+        color: #e2e8f0;
+      }
+      .glass {
+        background: rgba(12, 19, 34, 0.85);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .card {
+        border-radius: 16px;
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.06),
+          rgba(255, 255, 255, 0.02)
+        );
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .btn {
+        transition: all 180ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.15);
+      }
+      .fade {
+        animation: f 260ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      @keyframes f {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .modal {
+        animation: m 220ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      @keyframes m {
+        from {
+          opacity: 0;
+          transform: scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      .toast {
+        animation: t 280ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      @keyframes t {
+        from {
+          opacity: 0;
+          transform: translateX(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--accent);
+        border-radius: 99px;
+      }
+      .compact .card {
+        padding: 0.6rem !important;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen">
+    <div id="app"></div>
+    <div
+      id="toasts"
+      class="fixed top-4 right-4 z-[9999] flex flex-col gap-2"
+    ></div>
+    <div id="modal"></div>
+    <script>
+      const KEYS = [
+        "users",
+        "customers",
+        "sales_daily",
+        "admin_daily",
+        "pipeline",
+        "sales_forecast",
+        "quotation",
+        "forecast_trend",
+        "actual_vs_forecast",
+        "documentation",
+        "refreshment",
+        "evaluation",
+        "app_settings",
+        "menu_labels",
+        "menu_icons",
+        "menu_order",
+        "menu_visibility",
+        "login_history",
+        "presence",
+        "access_control",
+        "custom_menus",
+        "header_cfg",
+      ];
+      const DEFAULT_USERS = [
+        {
+          username: "master",
+          password: "Master123!",
+          name: "Master Control",
+          role: "Master",
+          securityQ: "Kode rahasia master?",
+          securityA: "titan",
+          active: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          username: "admin",
+          password: "Admin123!",
+          name: "Administrator",
+          role: "Admin",
+          securityQ: "Kota lahir?",
+          securityA: "jakarta",
+          active: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          username: "budi.santoso",
+          password: "Sales123!",
+          name: "Budi Santoso",
+          role: "Sales",
+          securityQ: "Hewan pertama?",
+          securityA: "milo",
+          active: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          username: "rina.wulandari",
+          password: "Sales123!",
+          name: "Rina Wulandari",
+          role: "Sales",
+          securityQ: "Makanan favorit?",
+          securityA: "rendang",
+          active: true,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      const BASE_MENUS = [
+        { id: "dashboard", label: "Dashboard", icon: "layout-dashboard" },
+        { id: "customer", label: "Customer DB", icon: "building-2" },
+        {
+          id: "sales_daily",
+          label: "Sales Daily Activity",
+          icon: "clipboard-list",
+        },
+        { id: "admin_daily", label: "Admin Daily Activity", icon: "file-cog" },
+        { id: "pipeline", label: "Pipeline Engine", icon: "kanban" },
+        { id: "forecast", label: "Sales Forecast", icon: "trending-up" },
+        { id: "quotation", label: "Monitoring Quotation", icon: "file-text" },
+        { id: "trend", label: "Forecast Trend Analysis", icon: "bar-chart-3" },
+        { id: "actual", label: "Sales Actual vs Forecast", icon: "scale" },
+        { id: "doc", label: "Documentation", icon: "folder-archive" },
+        {
+          id: "refreshment",
+          label: "Refreshment & Assessment",
+          icon: "graduation-cap",
+        },
+        { id: "evaluation", label: "Evaluasi Bulanan Sales", icon: "star" },
+        { id: "analytics", label: "Analytics", icon: "pie-chart" },
+        {
+          id: "akun",
+          label: "Akun",
+          icon: "users",
+          roles: ["Master", "Admin"],
+        },
+        {
+          id: "settings",
+          label: "App Customizer / Settings",
+          icon: "settings",
+          roles: ["Master", "Admin"],
+        },
+      ];
+      const ICONS = [
+        "layout-dashboard",
+        "building-2",
+        "clipboard-list",
+        "file-cog",
+        "kanban",
+        "trending-up",
+        "file-text",
+        "bar-chart-3",
+        "scale",
+        "folder-archive",
+        "graduation-cap",
+        "star",
+        "pie-chart",
+        "users",
+        "settings",
+        "shield",
+        "briefcase",
+        "database",
+        "link",
+        "globe",
+        "zap",
+        "book-open",
+        "notebook",
+        "file-check",
+        "contact",
+      ];
+      const ACCENTS = {
+        Emerald: ["#10b981", "#34d399"],
+        Cyan: ["#06b6d4", "#22d3ee"],
+        Indigo: ["#6366f1", "#818cf8"],
+        Amber: ["#f59e0b", "#fcd34d"],
+        Rose: ["#f43f5e", "#fb7185"],
+      };
+      const FONTS = {
+        Inter: "Inter, sans-serif",
+        "JetBrains Mono": "JetBrains Mono, monospace",
+        "Space Grotesk": "Space Grotesk, sans-serif",
+        Manrope: "Manrope, sans-serif",
+        Outfit: "Outfit, sans-serif",
+      };
+      let currentUser = JSON.parse(
+        localStorage.getItem("titan_current") || "null",
+      );
+      let activeMenu = "dashboard";
+      let sidebarOpen = false;
+      let sdView = "board";
+
+      const g = (k) => {
+        try {
+          return JSON.parse(localStorage.getItem("titan_" + k) || "null") || [];
+        } catch {
+          return [];
+        }
+      };
+      const s = (k, v) => localStorage.setItem("titan_" + k, JSON.stringify(v));
+      const getObj = (k) => {
+        try {
+          return JSON.parse(localStorage.getItem("titan_" + k) || "{}");
+        } catch {
+          return {};
+        }
+      };
+      const setObj = (k, v) =>
+        localStorage.setItem("titan_" + k, JSON.stringify(v));
+      const uid = () =>
+        Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const fmt = (d) => new Date(d).toLocaleString("id-ID");
+      function toast(m, er) {
+        const c = document.getElementById("toasts");
+        const el = document.createElement("div");
+        el.className = `toast glass px-4 py-3 rounded-xl text-sm flex gap-2 border-l-4 ${er ? "border-red-500" : "border-emerald-500"}`;
+        el.innerHTML = `<i data-lucide="${er ? "alert-circle" : "check-circle"}" class="w-4 h-4"></i> ${m}`;
+        c.appendChild(el);
+        lucide.createIcons();
+        setTimeout(() => el.remove(), 3500);
+      }
+      function canManage(targetRole) {
+        if (currentUser.role === "Master") return true;
+        if (currentUser.role === "Admin") return targetRole === "Sales";
+        return false;
+      }
+      function filterOwner(arr) {
+        if (!currentUser) return [];
+        if (currentUser.role !== "Sales") return arr;
+        return arr.filter((r) => r.owner === currentUser.username);
+      }
+
+      function seed() {
+        if (!localStorage.getItem("titan_users")) s("users", DEFAULT_USERS);
+        if (!localStorage.getItem("titan_app_settings"))
+          setObj("app_settings", {
+            appName: "TITAN APEX V4",
+            accent: "Emerald",
+            font: "Inter",
+            density: "Nyaman",
+          });
+        if (!localStorage.getItem("titan_menu_labels"))
+          setObj("menu_labels", {});
+        if (!localStorage.getItem("titan_menu_icons")) setObj("menu_icons", {});
+        if (!localStorage.getItem("titan_menu_order"))
+          s(
+            "menu_order",
+            BASE_MENUS.map((m) => m.id),
+          );
+        if (!localStorage.getItem("titan_menu_visibility"))
+          setObj(
+            "menu_visibility",
+            Object.fromEntries(BASE_MENUS.map((m) => [m.id, true])),
+          );
+        if (!localStorage.getItem("titan_header_cfg"))
+          setObj("header_cfg", {
+            showClock: true,
+            showBadge: true,
+            showTheme: true,
+            showOnline: true,
+          });
+        if (!localStorage.getItem("titan_presence")) setObj("presence", {});
+        if (!localStorage.getItem("titan_login_history"))
+          s("login_history", []);
+        if (!localStorage.getItem("titan_access_control"))
+          setObj("access_control", {});
+        if (!localStorage.getItem("titan_custom_menus")) s("custom_menus", []);
+        // dummy
+        if (g("customers").length === 0) {
+          s("customers", [
+            {
+              id: uid(),
+              customer_code: "CUST-0001",
+              sales: "budi.santoso",
+              pt: "PT Kaltim Prima Coal",
+              pic: "Andi Wijaya",
+              wa: "081234567890",
+              email: "andi@kpc.co.id",
+              jabatan: "Procurement Mgr",
+              site: "Sangatta",
+              cuti: "-",
+              ultah: "12 Mar",
+              tinggal: "Balikpapan",
+              note: "MCCB annual",
+              owner: "admin",
+              createdAt: new Date().toISOString(),
+            },
+            {
+              id: uid(),
+              customer_code: "CUST-0002",
+              sales: "rina.wulandari",
+              pt: "PT Adaro Indonesia",
+              pic: "Siti Rahma",
+              wa: "082345678901",
+              email: "siti@adaro.com",
+              jabatan: "Maintenance Sup",
+              site: "Tanjung",
+              cuti: "-",
+              ultah: "05 Jul",
+              tinggal: "Banjarmasin",
+              note: "Conveyor focus",
+              owner: "admin",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          s("sales_daily", [
+            {
+              id: uid(),
+              customer_code: "CUST-0001",
+              type: "Visit",
+              pt: "PT Kaltim Prima Coal",
+              pic: "Andi Wijaya",
+              wa: "081234567890",
+              site: "Sangatta",
+              status: "Completed",
+              note: "Presentasi MCCB 400A",
+              absensi: "08:00",
+              attachment: "",
+              owner: "budi.santoso",
+              createdAt: new Date().toISOString(),
+            },
+            {
+              id: uid(),
+              customer_code: "CUST-0002",
+              type: "Call",
+              pt: "PT Adaro Indonesia",
+              pic: "Siti Rahma",
+              wa: "082345678901",
+              site: "Tanjung",
+              status: "Pending",
+              note: "Follow up roller",
+              absensi: "-",
+              attachment: "",
+              owner: "rina.wulandari",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          s("admin_daily", [
+            {
+              id: uid(),
+              customer_code: "CUST-0001",
+              type: "PO Input",
+              ref_no: "PO/KPC/001",
+              pt: "PT Kaltim Prima Coal",
+              dokumen: "PO MCCB",
+              status: "Proses",
+              owner: "admin",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          s("pipeline", [
+            {
+              id: uid(),
+              customer_code: "CUST-0001",
+              pt: "PT Kaltim Prima Coal",
+              sales: "budi.santoso",
+              stage: "Market Map",
+              value: 250000000,
+              product: "MCCB 400A",
+              prob: 10,
+              owner: "budi.santoso",
+              createdAt: new Date().toISOString(),
+            },
+            {
+              id: uid(),
+              customer_code: "CUST-0002",
+              pt: "PT Adaro Indonesia",
+              sales: "rina.wulandari",
+              stage: "Negotiation",
+              value: 480000000,
+              product: "Roller HDPE",
+              prob: 70,
+              owner: "rina.wulandari",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          s("sales_forecast", [
+            {
+              id: uid(),
+              customer_code: "CUST-0001",
+              sales: "budi.santoso",
+              pt: "PT Kaltim Prima Coal",
+              part_no: "MCCB-400A-SCH",
+              deskripsi: "MCCB 400A",
+              periode: "2026-09",
+              t_qty: 20,
+              t_rp: 200000000,
+              actual_qty: 12,
+              actual_rp: 120000000,
+              site: "Sangatta",
+              status: "On Track",
+              remarks: "Partial",
+              owner: "budi.santoso",
+              createdAt: new Date().toISOString(),
+            },
+            {
+              id: uid(),
+              customer_code: "CUST-0002",
+              sales: "rina.wulandari",
+              pt: "PT Adaro Indonesia",
+              part_no: "RLR-HDPE-89",
+              deskripsi: "Roller 89mm",
+              periode: "2026-09",
+              t_qty: 100,
+              t_rp: 350000000,
+              actual_qty: 100,
+              actual_rp: 350000000,
+              site: "Tanjung",
+              status: "Achieved",
+              remarks: "Closed",
+              owner: "rina.wulandari",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          s("quotation", [
+            {
+              id: uid(),
+              customer_code: "CUST-0001",
+              quot_no: "QT-2026-001",
+              pt: "PT Kaltim Prima Coal",
+              tgl_quot: "2026-08-01",
+              tgl_exp: "2026-09-01",
+              part: "MCCB 400A",
+              harga: 10000000,
+              qty: 20,
+              total: 200000000,
+              margin_p: 15,
+              margin_rp: 30000000,
+              po_status: "Pending",
+              loss: "0",
+              remarks: "Waiting",
+              owner: "budi.santoso",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          s("forecast_trend", [
+            {
+              id: uid(),
+              forecast_ref: g("sales_forecast")[0]?.id || "",
+              pt: "PT Kaltim Prima Coal",
+              sales: "budi.santoso",
+              part_no: "MCCB-400A-SCH",
+              smt1_qty: 50,
+              smt2_qty: 70,
+              actual_2025: 60,
+              forecast_2026: 120,
+              alasan: "Crusher line",
+              owner: "budi.santoso",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          s("actual_vs_forecast", [
+            {
+              id: uid(),
+              customer_code: "CUST-0001",
+              pt: "PT Kaltim Prima Coal",
+              part_no: "MCCB-400A-SCH",
+              target_qty: 20,
+              actual_qty: 12,
+              owner: "budi.santoso",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          s("documentation", [
+            {
+              id: uid(),
+              customer_code: "CUST-0001",
+              nama: "Datasheet MCCB.pdf",
+              file: "",
+              fileName: "datasheet.pdf",
+              owner: "budi.santoso",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          s("refreshment", [
+            {
+              id: uid(),
+              tanggal: "2026-08-20",
+              jenis: "Weekly Brainstorming",
+              topik: "MCCB Knowledge",
+              durasi: 30,
+              peserta: "budi.santoso",
+              nilai: "-",
+              ringkasan: "Trip curve",
+              status: "Selesai",
+              owner: "admin",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          s("evaluation", [
+            {
+              id: uid(),
+              periode: "2026-08",
+              sales: "budi.santoso",
+              topik: "Visit Rate",
+              deskripsi: "Kunjungan -20%",
+              skor: 75,
+              foto: "",
+              tindak: "Tingkatkan jadwal",
+              status: "In Progress",
+              owner: "admin",
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
+      function applyTheme() {
+        const cfg = getObj("app_settings");
+        if (ACCENTS[cfg.accent]) {
+          document.documentElement.style.setProperty(
+            "--accent",
+            ACCENTS[cfg.accent][0],
+          );
+          document.documentElement.style.setProperty(
+            "--accent2",
+            ACCENTS[cfg.accent][1],
+          );
+        }
+        if (FONTS[cfg.font])
+          document.documentElement.style.setProperty("--font", FONTS[cfg.font]);
+        document.body.classList.toggle("compact", cfg.density === "Kompak");
+      }
+
+      function addLoginHistory(username, action) {
+        let h = g("login_history");
+        h.unshift({
+          id: uid(),
+          username,
+          action,
+          time: new Date().toISOString(),
+          name:
+            g("users").find((u) => u.username === username)?.name || username,
+        });
+        s("login_history", h.slice(0, 300));
+      }
+      function updatePresence() {
+        if (!currentUser) return;
+        let p = getObj("presence");
+        p[currentUser.username] = {
+          lastActiveAt: new Date().toISOString(),
+          role: currentUser.role,
+          name: currentUser.name,
+        };
+        setObj("presence", p);
+      }
+      function getOnlineUsers() {
+        const p = getObj("presence");
+        const now = Date.now();
+        return Object.entries(p)
+          .filter(
+            ([_, v]) =>
+              now - new Date(v.lastActiveAt).getTime() < 3 * 60 * 1000,
+          )
+          .map(([username, v]) => ({ username, ...v }));
+      }
+      setInterval(() => {
+        if (currentUser) updatePresence();
+      }, 30000);
+
+      // EXPORT
+      function exportExcel(data, filename) {
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Data");
+        XLSX.writeFile(wb, filename + ".xlsx");
+      }
+      function exportPDF(data, filename) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF("l", "mm", "a4");
+        doc.text(filename, 14, 14);
+        if (data.length) {
+          const cols = Object.keys(data[0]);
+          const rows = data.map((r) => cols.map((c) => String(r[c] ?? "")));
+          doc.autoTable({
+            head: [cols],
+            body: rows,
+            startY: 20,
+            styles: { fontSize: 6 },
+            headStyles: { fillColor: [16, 185, 129] },
+          });
+        }
+        doc.save(filename + ".pdf");
+      }
+      function exportWord(data, filename) {
+        let html =
+          "<table border=1><tr>" +
+          Object.keys(data[0] || {})
+            .map((c) => `<th>${c}</th>`)
+            .join("") +
+          "</tr>" +
+          data
+            .map(
+              (r) =>
+                "<tr>" +
+                Object.values(r)
+                  .map((v) => `<td>${v ?? ""}</td>`)
+                  .join("") +
+                "</tr>",
+            )
+            .join("") +
+          "</table>";
+        const blob = new Blob(["\ufeff", html], { type: "application/msword" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename + ".doc";
+        a.click();
+      }
+
+      // AUTH UI
+      function renderLogin() {
+        document.getElementById("app").innerHTML = `
+ <div class="min-h-screen flex items-center justify-center p-4 bg-[#060913]">
+  <div class="glass card w-full max-w-5xl grid md:grid-cols-2 overflow-hidden">
+   <div class="p-8 md:p-10 bg-gradient-to-br from-emerald-900/30 to-cyan-900/20 flex flex-col justify-between">
+    <div><h1 class="text-3xl font-bold" style="color:var(--accent)">TITAN APEX V4</h1><p class="text-sm opacity-60 mt-2">Industrial & Mining CRM — Master Control Edition</p><div class="mt-6 space-y-2 text-xs opacity-70"><div>✔ Master > Admin > Sales hierarchy</div><div>✔ Heartbeat online + login history</div><div>✔ Customer Code integration + Kontrol Akses</div></div></div>
+    <div class="mt-8 p-3 rounded-xl bg-black/40 text-xs font-mono">Demo:<br>master / Master123! (Master)<br>admin / Admin123! (Admin)<br>budi.santoso / Sales123!<br>rina.wulandari / Sales123!</div>
+   </div>
+   <div class="p-8 md:p-10">
+    <div id="box-login"><h2 class="text-xl font-bold">Login</h2><div class="mt-6 space-y-3"><input id="l_user" placeholder="Username" class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10"><input id="l_pass" type="password" placeholder="Password" class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10"><button onclick="doLogin()" class="w-full py-3 rounded-xl font-bold" style="background:var(--accent);color:#000">Masuk</button><div class="flex justify-between text-xs"><a href="#" onclick="showBox('reg')" class="hover:underline" style="color:var(--accent)">Registrasi</a><a href="#" onclick="showBox('forgot')" class="opacity-60">Lupa Password?</a></div></div></div>
+    <div id="box-reg" class="hidden"><h2 class="text-xl font-bold">Registrasi (Sales)</h2><div class="mt-6 space-y-3"><input id="r_name" placeholder="Nama" class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10"><input id="r_user" placeholder="Username" class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10"><input id="r_pass" type="password" placeholder="Password" class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10"><input id="r_q" placeholder="Pertanyaan Keamanan" class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10"><input id="r_a" placeholder="Jawaban" class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10"><button onclick="doReg()" class="w-full py-3 rounded-xl font-bold" style="background:var(--accent);color:#000">Daftar</button><a href="#" onclick="showBox('login')" class="text-xs" style="color:var(--accent)">Kembali</a></div></div>
+    <div id="box-forgot" class="hidden"><h2 class="text-xl font-bold">Lupa Password</h2><div class="mt-6 space-y-3" id="fg1"><input id="f_user" placeholder="Username" class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10"><button onclick="doFg1()" class="w-full py-3 rounded-xl font-bold" style="background:var(--accent);color:#000">Cek</button></div><div id="fg2" class="hidden space-y-3 mt-4"><p id="f_q" class="text-sm opacity-70"></p><input id="f_a" placeholder="Jawaban" class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10"><input id="f_new" type="password" placeholder="Password Baru" class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10"><button onclick="doFg2()" class="w-full py-3 rounded-xl font-bold" style="background:var(--accent);color:#000">Reset</button></div><a href="#" onclick="showBox('login')" class="text-xs" style="color:var(--accent)">Kembali</a></div>
+   </div>
+  </div>
+ </div>`;
+        lucide.createIcons();
+      }
+      function showBox(k) {
+        document
+          .getElementById("box-login")
+          .classList.toggle("hidden", k !== "login");
+        document
+          .getElementById("box-reg")
+          .classList.toggle("hidden", k !== "reg");
+        document
+          .getElementById("box-forgot")
+          .classList.toggle("hidden", k !== "forgot");
+      }
+      function doLogin() {
+        const u = document.getElementById("l_user").value.trim(),
+          p = document.getElementById("l_pass").value;
+        const users = g("users");
+        const f = users.find((x) => x.username === u && x.password === p);
+        if (!f) return toast("Username/password salah", true);
+        if (!f.active) return toast("Akun nonaktif", true);
+        currentUser = f;
+        localStorage.setItem("titan_current", JSON.stringify(f));
+        updatePresence();
+        addLoginHistory(f.username, "LOGIN");
+        renderApp();
+      }
+      function doReg() {
+        const name = document.getElementById("r_name").value,
+          user = document.getElementById("r_user").value.trim(),
+          pass = document.getElementById("r_pass").value,
+          q = document.getElementById("r_q").value,
+          a = document.getElementById("r_a").value;
+        if (!name || !user || !pass || !q || !a) return toast("Lengkapi", true);
+        let users = g("users");
+        if (users.find((u) => u.username === user))
+          return toast("Username ada", true);
+        users.push({
+          username: user,
+          password: pass,
+          name,
+          role: "Sales",
+          securityQ: q,
+          securityA: a.toLowerCase(),
+          active: true,
+          createdAt: new Date().toISOString(),
+        });
+        s("users", users);
+        toast("Registrasi berhasil");
+        showBox("login");
+      }
+      let fgUser = null;
+      function doFg1() {
+        const u = document.getElementById("f_user").value.trim();
+        const f = g("users").find((x) => x.username === u);
+        if (!f) return toast("User tidak ditemukan", true);
+        fgUser = f;
+        document.getElementById("f_q").innerText = "Q: " + f.securityQ;
+        document.getElementById("fg1").classList.add("hidden");
+        document.getElementById("fg2").classList.remove("hidden");
+      }
+      function doFg2() {
+        const ans = document.getElementById("f_a").value.toLowerCase(),
+          np = document.getElementById("f_new").value;
+        if (ans !== fgUser.securityA.toLowerCase())
+          return toast("Jawaban salah", true);
+        let users = g("users");
+        users = users.map((u) =>
+          u.username === fgUser.username ? { ...u, password: np } : u,
+        );
+        s("users", users);
+        toast("Password direset");
+        showBox("login");
+      }
+      function logout() {
+        if (currentUser) addLoginHistory(currentUser.username, "LOGOUT");
+        localStorage.removeItem("titan_current");
+        currentUser = null;
+        renderLogin();
+      }
+
+      // MAIN LAYOUT
+      function getAllMenus() {
+        const base = BASE_MENUS;
+        const custom = g("custom_menus").map((c) => ({
+          id: c.id,
+          label: c.label,
+          icon: c.icon || "file-text",
+          custom: true,
+        }));
+        return [...base, ...custom];
+      }
+      function getVisibleMenusForCurrentUser() {
+        const order = g("menu_order");
+        const vis = getObj("menu_visibility");
+        const labels = getObj("menu_labels");
+        const icons = getObj("menu_icons");
+        const access = getObj("access_control");
+        let all = getAllMenus();
+        // sort by order
+        let ordered = order
+          .map((id) => all.find((m) => m.id === id))
+          .filter(Boolean);
+        // append not in order
+        all.forEach((m) => {
+          if (!ordered.find((o) => o.id === m.id)) ordered.push(m);
+        });
+        // filter by global visibility
+        ordered = ordered.filter((m) => vis[m.id] !== false);
+        // filter by role
+        ordered = ordered.filter((m) => {
+          if (m.roles && !m.roles.includes(currentUser.role)) return false;
+          return true;
+        });
+        // filter by per-account access control (if exists)
+        if (currentUser.role !== "Master") {
+          const myAccess = access[currentUser.username];
+          if (myAccess && myAccess.enabled) {
+            ordered = ordered.filter((m) => myAccess.allowed.includes(m.id));
+          }
+        }
+        return { ordered, labels, icons };
+      }
+      function renderApp() {
+        if (!currentUser) {
+          renderLogin();
+          return;
+        }
+        applyTheme();
+        updatePresence();
+        const cfg = getObj("header_cfg");
+        const {
+          ordered: menus,
+          labels,
+          icons,
+        } = getVisibleMenusForCurrentUser();
+        const online = getOnlineUsers();
+        document.getElementById("app").innerHTML = `
+ <div class="flex min-h-screen">
+  <div id="ov" onclick="toggleSide()" class="fixed inset-0 bg-black/60 z-30 lg:hidden ${sidebarOpen ? "" : "hidden"}"></div>
+  <aside id="side" class="fixed lg:static inset-y-0 left-0 z-40 w-72 glass flex flex-col transform transition-all duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}">
+   <div class="p-5 flex justify-between border-b border-white/10"><div><h1 class="font-bold text-lg" style="color:var(--accent)" id="appName">${getObj("app_settings").appName}</h1><p class="text-[10px] opacity-50 tracking-widest">INDUSTRIAL & MINING CRM</p></div><button class="lg:hidden" onclick="toggleSide()"><i data-lucide="x" class="w-5 h-5"></i></button></div>
+   <div class="flex-1 overflow-y-auto p-3 space-y-1" id="menuList">
+    ${menus
+      .map((m) => {
+        const lb = labels[m.id] || m.label;
+        const ic = icons[m.id] || m.icon;
+        return `<button onclick="go('${m.id}')" id="m-${m.id}" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm ${activeMenu === m.id ? "font-bold" : ""} hover:bg-white/5" style="${activeMenu === m.id ? `background:var(--accent);color:#000` : ""}"><i data-lucide="${ic}" class="w-4 h-4"></i> ${lb}${m.custom ? '<span class="ml-auto text-[9px] opacity-50">CUSTOM</span>' : ""}</button>`;
+      })
+      .join("")}
+   </div>
+   <div class="p-3 border-t border-white/10 text-[11px] opacity-60"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> ${currentUser.name} (${currentUser.role})</div></div>
+  </aside>
+  <main class="flex-1 flex flex-col min-w-0">
+   <div class="glass sticky top-0 z-20 flex items-center justify-between px-4 md:px-6 py-3">
+    <div class="flex items-center gap-3"><button class="lg:hidden p-2 rounded-xl bg-white/5" onclick="toggleSide()"><i data-lucide="menu" class="w-5 h-5"></i></button><h2 id="modTitle" class="font-bold text-base md:text-lg"></h2></div>
+    <div class="flex items-center gap-2 md:gap-3">
+     ${cfg.showClock ? `<div class="hidden md:flex items-center gap-2 text-xs opacity-70"><i data-lucide="clock" class="w-4 h-4"></i><span id="clock"></span></div>` : ""}
+     ${cfg.showBadge ? `<span class="hidden md:inline-flex px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px]">Live</span>` : ""}
+     ${cfg.showOnline && ["Master", "Admin"].includes(currentUser.role) ? `<div class="relative"><button onclick="toggleOnlineDrop()" class="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/5 text-xs"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Online ${online.length} <i data-lucide="chevron-down" class="w-3 h-3"></i></button><div id="onlineDrop" class="hidden absolute right-0 mt-2 w-72 glass card p-3 z-50 max-h-80 overflow-y-auto"><h4 class="font-bold text-xs mb-2">Akun Online (${online.length})</h4>${online.map((o) => `<div class="flex justify-between text-xs bg-white/5 p-2 rounded mb-1"><span>${o.name} (${o.role})</span><span class="opacity-60">${new Date(o.lastActiveAt).toLocaleTimeString("id-ID")}</span></div>`).join("") || '<div class="text-xs opacity-50">Tidak ada</div>'}<button onclick="go('akun')" class="mt-2 w-full py-2 rounded-xl text-xs font-bold" style="background:var(--accent);color:#000">Lihat Riwayat Login</button></div></div>` : ""}
+     <div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full flex items-center justify-center text-black font-bold text-xs" style="background:var(--accent)">${currentUser.name.charAt(0)}</div><div class="hidden md:block text-xs leading-tight"><div class="font-bold">${currentUser.name}</div><div class="opacity-60">${currentUser.role}</div></div><button onclick="logout()" class="ml-2 px-3 py-1.5 rounded-xl bg-white/5 text-xs">Logout</button></div>
+    </div>
+   </div>
+   <div id="content" class="p-4 md:p-6 flex-1 fade overflow-y-auto"></div>
+  </main>
+ </div>`;
+        lucide.createIcons();
+        startClock();
+        go(activeMenu);
+      }
+      function toggleSide() {
+        sidebarOpen = !sidebarOpen;
+        document
+          .getElementById("side")
+          .classList.toggle("-translate-x-full", !sidebarOpen);
+        document.getElementById("ov").classList.toggle("hidden", !sidebarOpen);
+      }
+      function go(id) {
+        activeMenu = id;
+        const { ordered, labels, icons } = getVisibleMenusForCurrentUser();
+        if (!ordered.find((m) => m.id === id)) {
+          if (currentUser.role === "Sales")
+            return toast("Akses ditolak oleh Master", true);
+        }
+        document.querySelectorAll("[id^=m-]").forEach((b) => {
+          b.style.background = "";
+          b.style.color = "";
+        });
+        const el = document.getElementById("m-" + id);
+        if (el) {
+          el.style.background = "var(--accent)";
+          el.style.color = "#000";
+        }
+        const def =
+          ordered.find((m) => m.id === id) ||
+          getAllMenus().find((m) => m.id === id);
+        document.getElementById("modTitle").textContent =
+          getObj("menu_labels")[id] || def?.label || id;
+        if (window.innerWidth < 1024 && sidebarOpen) toggleSide();
+        renderModule(id);
+      }
+      function startClock() {
+        setInterval(() => {
+          const el = document.getElementById("clock");
+          if (el)
+            el.textContent =
+              new Date().toLocaleString("id-ID", {
+                timeZone: "Asia/Jakarta",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              }) + " WIB";
+        }, 1000);
+      }
+      function toggleOnlineDrop() {
+        document.getElementById("onlineDrop")?.classList.toggle("hidden");
+      }
+
+      // GENERIC TABLE + TOOLBAR
+      function toolbar(k) {
+        return `<div class="flex flex-wrap gap-2 mb-4"><button onclick="openForm('${k}')" class="px-4 py-2 rounded-xl text-sm font-bold" style="background:var(--accent);color:#000">+ Input/Tambah</button><label class="px-3 py-2 rounded-xl bg-white/5 text-sm cursor-pointer">Import<input type="file" class="hidden" onchange="importExcel(event,'${k}')"></label><button onclick="handleExport('${k}','excel')" class="px-3 py-2 rounded-xl bg-white/5 text-sm">Excel</button><button onclick="handleExport('${k}','pdf')" class="px-3 py-2 rounded-xl bg-white/5 text-sm">PDF</button><button onclick="handleExport('${k}','word')" class="px-3 py-2 rounded-xl bg-white/5 text-sm">Word</button></div>`;
+      }
+      function handleExport(key, type) {
+        let data = filterOwner(g(key));
+        if (!data.length) return toast("Tidak ada data", true);
+        if (type === "excel") exportExcel(data, key);
+        if (type === "pdf") exportPDF(data, key);
+        if (type === "word") exportWord(data, key);
+      }
+      function importExcel(e, key) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const wb = XLSX.read(ev.target.result, { type: "binary" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(ws);
+          let existing = g(key);
+          json.forEach((r) => {
+            r.id = uid();
+            r.owner = currentUser.username;
+            r.createdAt = new Date().toISOString();
+          });
+          s(key, [...existing, ...json]);
+          toast("Import berhasil");
+          renderModule(activeMenu);
+        };
+        reader.readAsBinaryString(file);
+      }
+      function delRow(k, id) {
+        if (!confirm("Hapus?")) return;
+        s(
+          k,
+          g(k).filter((r) => r.id !== id),
+        );
+        toast("Dihapus");
+        renderModule(activeMenu);
+      }
+
+      // MODULE RENDERS (compact reusable)
+      function renderCustomer() {
+        const data = filterOwner(g("customers"));
+        return `${toolbar("customers")}<div class="overflow-x-auto card"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr>${["No", "Code", "Sales", "PT", "PIC", "WA", "Email", "Jabatan", "Site", "Note", "Aksi"].map((h) => `<th class="px-3 py-2 text-left whitespace-nowrap">${h}</th>`).join("")}</tr></thead><tbody>${data.map((r, i) => `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${i + 1}</td><td class="px-3 py-2 whitespace-nowrap font-mono" style="color:var(--accent)">${r.customer_code}</td><td class="px-3 py-2 whitespace-nowrap">${r.sales}</td><td class="px-3 py-2 whitespace-nowrap">${r.pt}</td><td class="px-3 py-2 whitespace-nowrap">${r.pic}</td><td class="px-3 py-2 whitespace-nowrap">${r.wa}</td><td class="px-3 py-2 whitespace-nowrap">${r.email}</td><td class="px-3 py-2 whitespace-nowrap">${r.jabatan}</td><td class="px-3 py-2 whitespace-nowrap">${r.site}</td><td class="px-3 py-2 whitespace-nowrap">${r.note}</td><td class="px-3 py-2 whitespace-nowrap flex gap-1"><button onclick="openForm('customers','${r.id}')" class="p-1 bg-white/5 rounded">Edit</button><button onclick="delRow('customers','${r.id}')" class="p-1 bg-red-500/20 rounded">Del</button></td></tr>`).join("")}</tbody></table></div>`;
+      }
+      function renderSalesDaily() {
+        const data = filterOwner(g("sales_daily"));
+        const custs = g("customers");
+        if (!custs.length)
+          return `<div class="card p-6 text-center">Isi Customer DB dulu <button onclick="go('customer')" class="underline" style="color:var(--accent)">Customer DB</button></div>`;
+        const comp = data.filter((d) => d.status === "Completed"),
+          pend = data.filter((d) => d.status !== "Completed");
+        return `${toolbar("sales_daily")}<div class="flex gap-2 mb-3"><button onclick="setSD('board')" class="px-3 py-1 rounded bg-white/5 text-xs">Board</button><button onclick="setSD('table')" class="px-3 py-1 rounded bg-white/5 text-xs">Table</button></div><div id="sd">${sdView === "board" ? renderSDBoard(comp, pend) : renderSDTable(data)}</div>`;
+      }
+      function setSD(v) {
+        sdView = v;
+        const data = filterOwner(g("sales_daily"));
+        const comp = data.filter((d) => d.status === "Completed"),
+          pend = data.filter((d) => d.status !== "Completed");
+        document.getElementById("sd").innerHTML =
+          v === "board" ? renderSDBoard(comp, pend) : renderSDTable(data);
+        lucide.createIcons();
+      }
+      function renderSDBoard(comp, pend) {
+        const card = (r) =>
+          `<div class="card p-3 mb-2"><div class="flex justify-between"><span class="font-mono text-xs" style="color:var(--accent)">${r.customer_code}</span><span class="text-[10px] px-2 py-0.5 rounded bg-white/10">${r.status}</span></div><div class="font-bold text-sm">${r.pt}</div><div class="text-xs opacity-60">${r.type} • ${r.pic}</div><div class="text-xs mt-1">${r.note}</div><div class="flex gap-1 mt-2"><button onclick="createPipe('${r.id}')" class="text-[10px] px-2 py-1 rounded font-bold" style="background:var(--accent);color:#000">Buat Pipeline</button><button onclick="openForm('sales_daily','${r.id}')" class="text-[10px] px-2 py-1 rounded bg-white/5">Edit</button><button onclick="delRow('sales_daily','${r.id}')" class="text-[10px] px-2 py-1 rounded bg-red-500/20">Del</button></div></div>`;
+        return `<div class="grid md:grid-cols-2 gap-4"><div><h4 class="font-bold text-xs mb-2">Completed (${comp.length})</h4>${comp.map(card).join("") || "-"}</div><div><h4 class="font-bold text-xs mb-2">Pending (${pend.length})</h4>${pend.map(card).join("") || "-"}</div></div>`;
+      }
+      function renderSDTable(data) {
+        return `<div class="overflow-x-auto card"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr>${["Code", "Type", "PT", "PIC", "Status", "Note", "Owner", "Aksi"].map((h) => `<th class="px-3 py-2 whitespace-nowrap">${h}</th>`).join("")}</tr></thead><tbody>${data.map((r) => `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${r.customer_code}</td><td class="px-3 py-2 whitespace-nowrap">${r.type}</td><td class="px-3 py-2 whitespace-nowrap">${r.pt}</td><td class="px-3 py-2 whitespace-nowrap">${r.pic}</td><td class="px-3 py-2 whitespace-nowrap">${r.status}</td><td class="px-3 py-2 whitespace-nowrap">${r.note}</td><td class="px-3 py-2 whitespace-nowrap">${r.owner}</td><td class="px-3 py-2 whitespace-nowrap"><button onclick="createPipe('${r.id}')" class="px-2 py-1 text-xs rounded font-bold" style="background:var(--accent);color:#000">Pipeline</button> <button onclick="openForm('sales_daily','${r.id}')" class="px-1 bg-white/5 rounded">E</button></td></tr>`).join("")}</tbody></table></div>`;
+      }
+      function createPipe(id) {
+        const act = g("sales_daily").find((a) => a.id === id);
+        if (!act) return;
+        let pipe = g("pipeline");
+        pipe.push({
+          id: uid(),
+          customer_code: act.customer_code,
+          pt: act.pt,
+          sales: act.owner,
+          stage: "Market Map",
+          value: 100000000,
+          product: act.note.slice(0, 30),
+          prob: 10,
+          owner: act.owner,
+          createdAt: new Date().toISOString(),
+        });
+        s("pipeline", pipe);
+        toast("Pipeline dibuat");
+        go("pipeline");
+      }
+      function renderAdminDaily() {
+        const data = filterOwner(g("admin_daily"));
+        return `${toolbar("admin_daily")}<div class="overflow-x-auto card"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr>${["Code", "Type", "Ref", "PT", "Dok", "Status", "Owner", "Aksi"].map((h) => `<th class="px-3 py-2 whitespace-nowrap">${h}</th>`).join("")}</tr></thead><tbody>${data.map((r) => `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${r.customer_code}</td><td class="px-3 py-2 whitespace-nowrap">${r.type}</td><td class="px-3 py-2 whitespace-nowrap">${r.ref_no}</td><td class="px-3 py-2 whitespace-nowrap">${r.pt}</td><td class="px-3 py-2 whitespace-nowrap">${r.dokumen}</td><td class="px-3 py-2 whitespace-nowrap">${r.status}</td><td class="px-3 py-2 whitespace-nowrap">${r.owner}</td><td class="px-3 py-2 whitespace-nowrap"><button onclick="openForm('admin_daily','${r.id}')" class="p-1 bg-white/5 rounded">Edit</button> <button onclick="delRow('admin_daily','${r.id}')" class="p-1 bg-red-500/20 rounded">Del</button></td></tr>`).join("")}</tbody></table></div>`;
+      }
+      function renderPipeline() {
+        const data = filterOwner(g("pipeline"));
+        const stages = [
+          "Market Map",
+          "Lead",
+          "Qualified",
+          "Proposal",
+          "Negotiation",
+          "PO",
+          "Delivery",
+          "Handover",
+        ];
+        const total = data.reduce((a, b) => a + b.value, 0);
+        const win = data.filter((d) => d.stage === "Handover").length;
+        const rate = data.length ? ((win / data.length) * 100).toFixed(1) : 0;
+        return `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"><div class="card p-4"><div class="text-xs opacity-60">Total Value</div><div class="font-bold">Rp ${(total / 1000000).toFixed(0)}Jt</div></div><div class="card p-4"><div class="text-xs opacity-60">Win Rate</div><div class="font-bold">${rate}%</div></div><div class="card p-4"><div class="text-xs opacity-60">Deals</div><div class="font-bold">${data.length}</div></div><div class="card p-4"><button onclick="openForm('pipeline')" class="w-full py-2 rounded-xl font-bold" style="background:var(--accent);color:#000">+ Deal</button></div></div><div class="overflow-x-auto"><div class="flex gap-3 min-w-[1200px]">${stages
+          .map((st) => {
+            const items = data.filter((d) => d.stage === st);
+            return `<div class="w-56 card p-3"><h4 class="font-bold text-xs mb-2">${st} (${items.length})</h4>${items.map((r) => `<div class="bg-white/5 rounded-xl p-2 text-xs mb-2"><div class="font-mono" style="color:var(--accent)">${r.customer_code}</div><div class="font-bold">${r.pt}</div><div class="opacity-60">${r.product} ${(r.value / 1000000).toFixed(0)}Jt</div><button onclick="openForm('pipeline','${r.id}')" class="mt-1 px-2 py-0.5 bg-white/10 rounded text-[10px]">Edit</button> <button onclick="delRow('pipeline','${r.id}')" class="px-2 py-0.5 bg-red-500/20 rounded text-[10px]">Del</button></div>`).join("") || "-"}</div>`;
+          })
+          .join("")}</div></div>`;
+      }
+      function renderForecast() {
+        const data = filterOwner(g("sales_forecast"));
+        return `${toolbar("sales_forecast")}<div class="overflow-x-auto card"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr>${["Code", "Sales", "PT", "Part No", "Periode", "T.Qty", "T.Rp", "A.Qty", "A.Rp", "ACH Qty%", "ACH Rp%", "Status", "Aksi"].map((h) => `<th class="px-3 py-2 whitespace-nowrap">${h}</th>`).join("")}</tr></thead><tbody>${data
+          .map((r) => {
+            const aq = r.t_qty
+                ? ((r.actual_qty / r.t_qty) * 100).toFixed(1)
+                : 0,
+              ar = r.t_rp ? ((r.actual_rp / r.t_rp) * 100).toFixed(1) : 0;
+            return `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${r.customer_code}</td><td class="px-3 py-2 whitespace-nowrap">${r.sales}</td><td class="px-3 py-2 whitespace-nowrap">${r.pt}</td><td class="px-3 py-2 whitespace-nowrap">${r.part_no}</td><td class="px-3 py-2 whitespace-nowrap">${r.periode}</td><td class="px-3 py-2 whitespace-nowrap">${r.t_qty}</td><td class="px-3 py-2 whitespace-nowrap">${r.t_rp}</td><td class="px-3 py-2 whitespace-nowrap">${r.actual_qty}</td><td class="px-3 py-2 whitespace-nowrap">${r.actual_rp}</td><td class="px-3 py-2 whitespace-nowrap">${aq}%</td><td class="px-3 py-2 whitespace-nowrap">${ar}%</td><td class="px-3 py-2 whitespace-nowrap">${r.status}</td><td class="px-3 py-2 whitespace-nowrap"><button onclick="openForm('sales_forecast','${r.id}')" class="p-1 bg-white/5 rounded">Edit</button> <button onclick="delRow('sales_forecast','${r.id}')" class="p-1 bg-red-500/20 rounded">Del</button></td></tr>`;
+          })
+          .join("")}</tbody></table></div>`;
+      }
+      function renderQuotation() {
+        const data = filterOwner(g("quotation"));
+        return `${toolbar("quotation")}<div class="overflow-x-auto card"><table class="w-full text-[11px]"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr>${["Code", "Quot No", "PT", "Tgl", "Part", "Harga", "Qty", "Total", "Margin%", "Margin Rp", "PO", "Aksi"].map((h) => `<th class="px-2 py-2 whitespace-nowrap">${h}</th>`).join("")}</tr></thead><tbody>${data.map((r) => `<tr class="border-t border-white/5"><td class="px-2 py-1 whitespace-nowrap">${r.customer_code}</td><td class="px-2 py-1 whitespace-nowrap">${r.quot_no}</td><td class="px-2 py-1 whitespace-nowrap">${r.pt}</td><td class="px-2 py-1 whitespace-nowrap">${r.tgl_quot}</td><td class="px-2 py-1 whitespace-nowrap">${r.part}</td><td class="px-2 py-1 whitespace-nowrap">${r.harga}</td><td class="px-2 py-1 whitespace-nowrap">${r.qty}</td><td class="px-2 py-1 whitespace-nowrap">${r.total}</td><td class="px-2 py-1 whitespace-nowrap">${r.margin_p}%</td><td class="px-2 py-1 whitespace-nowrap">${r.margin_rp}</td><td class="px-2 py-1 whitespace-nowrap">${r.po_status}</td><td class="px-2 py-1 whitespace-nowrap"><button onclick="openForm('quotation','${r.id}')" class="p-1 bg-white/5 rounded">E</button> <button onclick="delRow('quotation','${r.id}')" class="p-1 bg-red-500/20 rounded">D</button></td></tr>`).join("")}</tbody></table></div>`;
+      }
+      function renderTrend() {
+        const data = filterOwner(g("forecast_trend"));
+        return `${toolbar("forecast_trend")}<div class="overflow-x-auto card"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr>${["Ref", "PT", "Part", "SMT1", "SMT2", "Actual25", "Fc26", "Dev%", "ACH%", "Alasan", "Aksi"].map((h) => `<th class="px-3 py-2 whitespace-nowrap">${h}</th>`).join("")}</tr></thead><tbody>${data
+          .map((r) => {
+            const dev = r.actual_2025
+              ? (
+                  ((r.forecast_2026 - r.actual_2025) / r.actual_2025) *
+                  100
+                ).toFixed(1)
+              : 0;
+            const ach = r.forecast_2026
+              ? (((r.smt1_qty + r.smt2_qty) / r.forecast_2026) * 100).toFixed(1)
+              : 0;
+            return `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap text-[10px]">${r.forecast_ref?.slice(0, 6)}</td><td class="px-3 py-2 whitespace-nowrap">${r.pt}</td><td class="px-3 py-2 whitespace-nowrap">${r.part_no}</td><td class="px-3 py-2 whitespace-nowrap">${r.smt1_qty}</td><td class="px-3 py-2 whitespace-nowrap">${r.smt2_qty}</td><td class="px-3 py-2 whitespace-nowrap">${r.actual_2025}</td><td class="px-3 py-2 whitespace-nowrap">${r.forecast_2026}</td><td class="px-3 py-2 whitespace-nowrap">${dev}%</td><td class="px-3 py-2 whitespace-nowrap">${ach}%</td><td class="px-3 py-2 whitespace-nowrap">${r.alasan}</td><td class="px-3 py-2 whitespace-nowrap"><button onclick="openForm('forecast_trend','${r.id}')" class="p-1 bg-white/5 rounded">Edit</button> <button onclick="delRow('forecast_trend','${r.id}')" class="p-1 bg-red-500/20 rounded">Del</button></td></tr>`;
+          })
+          .join("")}</tbody></table></div>`;
+      }
+      function renderActual() {
+        const data = filterOwner(g("actual_vs_forecast"));
+        return `${toolbar("actual_vs_forecast")}<div class="overflow-x-auto card"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr>${["Code", "PT", "Part", "Target", "Actual", "Short Qty", "Short%", "Status", "Aksi"].map((h) => `<th class="px-3 py-2 whitespace-nowrap">${h}</th>`).join("")}</tr></thead><tbody>${data
+          .map((r) => {
+            const sh = r.target_qty - r.actual_qty;
+            const perc = r.target_qty
+              ? ((sh / r.target_qty) * 100).toFixed(1)
+              : 0;
+            const st = sh <= 0 ? "Tercapai" : "Shortage";
+            return `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${r.customer_code}</td><td class="px-3 py-2 whitespace-nowrap">${r.pt}</td><td class="px-3 py-2 whitespace-nowrap">${r.part_no}</td><td class="px-3 py-2 whitespace-nowrap">${r.target_qty}</td><td class="px-3 py-2 whitespace-nowrap">${r.actual_qty}</td><td class="px-3 py-2 whitespace-nowrap">${sh}</td><td class="px-3 py-2 whitespace-nowrap">${perc}%</td><td class="px-3 py-2 whitespace-nowrap">${st}</td><td class="px-3 py-2 whitespace-nowrap"><button onclick="openForm('actual_vs_forecast','${r.id}')" class="p-1 bg-white/5 rounded">Edit</button> <button onclick="delRow('actual_vs_forecast','${r.id}')" class="p-1 bg-red-500/20 rounded">Del</button></td></tr>`;
+          })
+          .join("")}</tbody></table></div>`;
+      }
+      function renderDoc() {
+        const data = filterOwner(g("documentation"));
+        return `${toolbar("documentation")}<div class="overflow-x-auto card"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr><th class="px-3 py-2 whitespace-nowrap">Code</th><th class="px-3 py-2 whitespace-nowrap">Nama</th><th class="px-3 py-2 whitespace-nowrap">File</th><th class="px-3 py-2 whitespace-nowrap">Aksi</th></tr></thead><tbody>${data.map((r) => `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${r.customer_code || "-"}</td><td class="px-3 py-2 whitespace-nowrap">${r.nama}</td><td class="px-3 py-2 whitespace-nowrap">${r.fileName || "-"} ${r.file ? `<button onclick="dl('${r.file}','${r.fileName}')" class="ml-2 px-2 py-0.5 bg-emerald-500/20 rounded text-xs">Download</button>` : ""}</td><td class="px-3 py-2 whitespace-nowrap"><button onclick="delRow('documentation','${r.id}')" class="p-1 bg-red-500/20 rounded">Del</button></td></tr>`).join("")}</tbody></table></div>`;
+      }
+      function dl(d, n) {
+        const a = document.createElement("a");
+        a.href = d;
+        a.download = n;
+        a.click();
+      }
+      function renderRefreshment() {
+        const data = filterOwner(g("refreshment"));
+        return `${toolbar("refreshment")}<div class="overflow-x-auto card"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr>${["Tanggal", "Jenis", "Topik", "Durasi", "Peserta", "Nilai", "Status", "Aksi"].map((h) => `<th class="px-3 py-2 whitespace-nowrap">${h}</th>`).join("")}</tr></thead><tbody>${data.map((r) => `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${r.tanggal}</td><td class="px-3 py-2 whitespace-nowrap">${r.jenis}</td><td class="px-3 py-2 whitespace-nowrap">${r.topik}</td><td class="px-3 py-2 whitespace-nowrap">${r.durasi} mnt</td><td class="px-3 py-2 whitespace-nowrap">${r.peserta}</td><td class="px-3 py-2 whitespace-nowrap">${r.nilai}</td><td class="px-3 py-2 whitespace-nowrap">${r.status}</td><td class="px-3 py-2 whitespace-nowrap"><button onclick="openForm('refreshment','${r.id}')" class="p-1 bg-white/5 rounded">Edit</button> <button onclick="delRow('refreshment','${r.id}')" class="p-1 bg-red-500/20 rounded">Del</button></td></tr>`).join("")}</tbody></table></div>`;
+      }
+      function renderEvaluation() {
+        const data = filterOwner(g("evaluation"));
+        const sum = {};
+        data.forEach((r) => {
+          const sem = r.periode
+            ? r.periode.slice(0, 4) +
+              "-S" +
+              (parseInt(r.periode.split("-")[1]) <= 6 ? "1" : "2")
+            : "?";
+          const k = sem + "|" + r.sales;
+          if (!sum[k]) sum[k] = { sem, sales: r.sales, c: 0, tot: 0, top: [] };
+          sum[k].c++;
+          sum[k].tot += parseInt(r.skor) || 0;
+          sum[k].top.push(r.topik);
+        });
+        const arr = Object.values(sum).map((s) => ({
+          ...s,
+          avg: (s.tot / s.c).toFixed(1),
+        }));
+        return `${toolbar("evaluation")}<div class="overflow-x-auto card mb-6"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr>${["Periode", "Sales", "Topik", "Skor", "Status", "Aksi"].map((h) => `<th class="px-3 py-2 whitespace-nowrap">${h}</th>`).join("")}</tr></thead><tbody>${data.map((r) => `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${r.periode}</td><td class="px-3 py-2 whitespace-nowrap">${r.sales}</td><td class="px-3 py-2 whitespace-nowrap">${r.topik}</td><td class="px-3 py-2 whitespace-nowrap">${r.skor}</td><td class="px-3 py-2 whitespace-nowrap">${r.status}</td><td class="px-3 py-2 whitespace-nowrap"><button onclick="openForm('evaluation','${r.id}')" class="p-1 bg-white/5 rounded">Edit</button> <button onclick="delRow('evaluation','${r.id}')" class="p-1 bg-red-500/20 rounded">Del</button></td></tr>`).join("")}</tbody></table></div><h3 class="font-bold mb-2">Ringkasan Semester</h3><div class="overflow-x-auto card"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr><th class="px-3 py-2">Semester</th><th class="px-3 py-2">Sales</th><th class="px-3 py-2">Isu</th><th class="px-3 py-2">Avg</th><th class="px-3 py-2">Topik</th></tr></thead><tbody>${arr.map((s) => `<tr class="border-t border-white/5"><td class="px-3 py-2">${s.sem}</td><td class="px-3 py-2">${s.sales}</td><td class="px-3 py-2">${s.c}</td><td class="px-3 py-2">${s.avg}</td><td class="px-3 py-2">${s.top.join(", ")}</td></tr>`).join("")}</tbody></table></div>`;
+      }
+      function renderDashboard() {
+        const cust = filterOwner(g("customers")).length;
+        const pipe = filterOwner(g("pipeline"));
+        const tot = pipe.reduce((a, b) => a + b.value, 0);
+        const fc = filterOwner(g("sales_forecast"));
+        const ach = fc.length
+          ? (
+              (fc.reduce(
+                (a, b) => a + (b.t_qty ? b.actual_qty / b.t_qty : 0),
+                0,
+              ) /
+                fc.length) *
+              100
+            ).toFixed(1)
+          : 0;
+        const online = getOnlineUsers();
+        return `<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"><div class="card p-5"><div class="text-xs opacity-60">Customers</div><div class="text-2xl font-bold">${cust}</div></div><div class="card p-5"><div class="text-xs opacity-60">Pipeline Value</div><div class="text-2xl font-bold">Rp ${(tot / 1000000).toFixed(0)}Jt</div></div><div class="card p-5"><div class="text-xs opacity-60">Forecast ACH</div><div class="text-2xl font-bold">${ach}%</div></div><div class="card p-5"><div class="text-xs opacity-60">Online</div><div class="text-2xl font-bold">${online.length}</div></div></div><div class="grid md:grid-cols-2 gap-4"><div class="card p-4"><h3 class="font-bold text-sm mb-3">Forecast vs Actual</h3><canvas id="c1"></canvas></div><div class="card p-4"><h3 class="font-bold text-sm mb-3">Quotation Status</h3><canvas id="c2"></canvas></div></div>`;
+      }
+      function renderAnalytics() {
+        const fc = filterOwner(g("sales_forecast"));
+        const m = {};
+        fc.forEach((r) => {
+          m[r.sales] = (m[r.sales] || 0) + r.actual_rp;
+        });
+        const top = Object.entries(m)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
+        const pm = {};
+        fc.forEach((r) => {
+          pm[r.part_no] = (pm[r.part_no] || 0) + r.actual_qty;
+        });
+        const topP = Object.entries(pm)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
+        return `<div class="grid md:grid-cols-2 gap-4"><div class="card p-4"><h3 class="font-bold mb-3">Top Sales</h3>${top.map(([s, v], i) => `<div class="flex justify-between bg-white/5 p-2 rounded mb-1"><span>#${i + 1} ${s}</span><span>Rp ${(v / 1000000).toFixed(1)}Jt</span></div>`).join("") || "No data"}</div><div class="card p-4"><h3 class="font-bold mb-3">Top Sparepart</h3>${topP.map(([p, q], i) => `<div class="flex justify-between bg-white/5 p-2 rounded mb-1"><span>#${i + 1} ${p}</span><span>${q}</span></div>`).join("") || "No data"}</div></div>`;
+      }
+      function renderAkun() {
+        const users = g("users");
+        const presence = getObj("presence");
+        const online = getOnlineUsers();
+        const history = g("login_history");
+        const onlineSet = new Set(online.map((o) => o.username));
+        return `<div class="space-y-6">
+  <div class="card p-5"><h3 class="font-bold mb-3">Akun Terdaftar (${users.length})</h3><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr><th class="px-3 py-2 whitespace-nowrap">Nama</th><th class="px-3 py-2 whitespace-nowrap">Username</th><th class="px-3 py-2 whitespace-nowrap">Role</th><th class="px-3 py-2 whitespace-nowrap">Status</th><th class="px-3 py-2 whitespace-nowrap">Online</th><th class="px-3 py-2 whitespace-nowrap">Last Active</th><th class="px-3 py-2 whitespace-nowrap">Dibuat</th></tr></thead><tbody>${users
+    .map((u) => {
+      const isOn = onlineSet.has(u.username);
+      const last = presence[u.username]?.lastActiveAt;
+      return `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${u.name}</td><td class="px-3 py-2 whitespace-nowrap font-mono">${u.username}</td><td class="px-3 py-2 whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-[10px] ${u.role === "Master" ? "bg-rose-500/20 text-rose-300" : u.role === "Admin" ? "bg-indigo-500/20 text-indigo-300" : "bg-emerald-500/20 text-emerald-300"}">${u.role}</span></td><td class="px-3 py-2 whitespace-nowrap">${u.active ? "Aktif" : "Nonaktif"}</td><td class="px-3 py-2 whitespace-nowrap">${isOn ? '<span class="w-2 h-2 inline-block rounded-full bg-emerald-500"></span> Online' : '<span class="w-2 h-2 inline-block rounded-full bg-gray-600"></span> Offline'}</td><td class="px-3 py-2 whitespace-nowrap">${last ? fmt(last) : "-"}</td><td class="px-3 py-2 whitespace-nowrap">${u.createdAt ? fmt(u.createdAt) : "-"}</td></tr>`;
+    })
+    .join("")}</tbody></table></div></div>
+  <div class="card p-5"><h3 class="font-bold mb-3">Riwayat Login (300 terbaru)</h3><div class="overflow-x-auto max-h-96"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr><th class="px-3 py-2 whitespace-nowrap">Waktu</th><th class="px-3 py-2 whitespace-nowrap">Username</th><th class="px-3 py-2 whitespace-nowrap">Nama</th><th class="px-3 py-2 whitespace-nowrap">Aksi</th></tr></thead><tbody>${history.map((h) => `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${fmt(h.time)}</td><td class="px-3 py-2 whitespace-nowrap">${h.username}</td><td class="px-3 py-2 whitespace-nowrap">${h.name}</td><td class="px-3 py-2 whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-[10px] ${h.action === "LOGIN" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}">${h.action}</span></td></tr>`).join("")}</tbody></table></div></div>
+ </div>`;
+      }
+      function renderSettings() {
+        const cfg = getObj("app_settings");
+        const labels = getObj("menu_labels");
+        const icons = getObj("menu_icons");
+        const order = g("menu_order");
+        const vis = getObj("menu_visibility");
+        const hCfg = getObj("header_cfg");
+        const access = getObj("access_control");
+        const custom = g("custom_menus");
+        const all = getAllMenus();
+        return `<div class="space-y-6">
+  <div class="card p-5"><h3 class="font-bold mb-4">Identitas Aplikasi</h3><div class="grid md:grid-cols-2 gap-4"><div><label class="text-xs opacity-60">Nama Aplikasi</label><input id="s_name" value="${cfg.appName}" class="w-full mt-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10"></div><div><label class="text-xs opacity-60">Aksen</label><select id="s_accent" class="w-full mt-1 px-3 py-2 rounded-xl bg-[#0c1322] border border-white/10">${Object.keys(
+    ACCENTS,
+  )
+    .map((a) => `<option ${cfg.accent === a ? "selected" : ""}>${a}</option>`)
+    .join(
+      "",
+    )}</select></div><div><label class="text-xs opacity-60">Font</label><select id="s_font" class="w-full mt-1 px-3 py-2 rounded-xl bg-[#0c1322] border border-white/10">${Object.keys(
+    FONTS,
+  )
+    .map((f) => `<option ${cfg.font === f ? "selected" : ""}>${f}</option>`)
+    .join(
+      "",
+    )}</select></div><div><label class="text-xs opacity-60">Densitas</label><select id="s_den" class="w-full mt-1 px-3 py-2 rounded-xl bg-[#0c1322] border border-white/10"><option ${cfg.density === "Nyaman" ? "selected" : ""}>Nyaman</option><option ${cfg.density === "Kompak" ? "selected" : ""}>Kompak</option></select></div></div><button onclick="saveApp()" class="mt-4 px-6 py-2 rounded-xl font-bold" style="background:var(--accent);color:#000">Simpan Tampilan</button></div>
+
+  <div class="card p-5"><h3 class="font-bold mb-4">Kontrol Header & Sidebar</h3><div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">${Object.entries(
+    {
+      showClock: "Jam WIB",
+      showBadge: "Badge Online",
+      showTheme: "Theme Switcher (info)",
+      showOnline: "Widget Akun Online",
+    },
+  )
+    .map(
+      ([k, l]) =>
+        `<label class="flex items-center gap-2 bg-white/5 p-2 rounded-xl"><input type="checkbox" ${hCfg[k] !== false ? "checked" : ""} onchange="setHeader('${k}',this.checked)"> ${l}</label>`,
+    )
+    .join("")}</div></div>
+
+  <div class="card p-5"><h3 class="font-bold mb-4">Urutan, Visibilitas, Nama & Ikon Menu</h3><div class="space-y-2">${order
+    .map((id, i) => {
+      const def = all.find((m) => m.id === id);
+      if (!def) return "";
+      return `<div class="flex flex-wrap items-center gap-2 bg-white/5 p-2 rounded-xl"><span class="text-xs w-5">${i + 1}</span><span class="font-mono text-xs w-20">${id}</span><input id="lb_${id}" value="${labels[id] || def.label}" placeholder="Label" class="flex-1 min-w-[100px] px-2 py-1 rounded bg-black/30 border border-white/10 text-sm"><select id="ic_${id}" class="px-2 py-1 rounded bg-[#0c1322] border border-white/10 text-xs">${ICONS.map((ic) => `<option value="${ic}" ${(icons[id] || def.icon) === ic ? "selected" : ""}>${ic}</option>`).join("")}</select><label class="flex items-center gap-1 text-xs"><input type="checkbox" ${vis[id] !== false ? "checked" : ""} onchange="setVis('${id}',this.checked)"> Tampil</label><button onclick="move('${id}',-1)" class="p-1 bg-white/5 rounded">↑</button><button onclick="move('${id}',1)" class="p-1 bg-white/5 rounded">↓</button></div>`;
+    })
+    .join(
+      "",
+    )}</div><div class="flex gap-2 mt-4"><button onclick="saveMenu()" class="px-6 py-2 rounded-xl font-bold" style="background:var(--accent);color:#000">Simpan Menu</button><button onclick="resetMenu()" class="px-6 py-2 rounded-xl bg-white/5">Reset Default</button></div></div>
+
+  <div class="card p-5"><h3 class="font-bold mb-4">Tambah Menu Kustom (SOP, Catatan, Info)</h3><div class="flex flex-wrap gap-2 mb-3"><input id="cm_id" placeholder="ID (mis: sop)" class="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm"><input id="cm_label" placeholder="Label" class="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm"><select id="cm_icon" class="px-3 py-2 rounded-xl bg-[#0c1322] border border-white/10 text-sm">${ICONS.map((ic) => `<option>${ic}</option>`).join("")}</select><button onclick="addCustomMenu()" class="px-4 py-2 rounded-xl font-bold" style="background:var(--accent);color:#000">+ Tambah</button></div><div class="space-y-2">${custom.map((c) => `<div class="flex items-center gap-2 bg-white/5 p-2 rounded-xl text-sm"><span class="font-mono">${c.id}</span> - ${c.label} <button onclick="editCustom('${c.id}')" class="ml-auto px-2 py-1 bg-white/5 rounded text-xs">Edit Isi</button><button onclick="delCustom('${c.id}')" class="px-2 py-1 bg-red-500/20 rounded text-xs">Hapus</button></div>`).join("") || '<div class="opacity-50 text-xs">Belum ada menu kustom</div>'}</div></div>
+
+  <div class="card p-5"><h3 class="font-bold mb-4">Manajemen Akun (${currentUser.role})</h3><p class="text-xs opacity-60 mb-3">${currentUser.role === "Master" ? "Master bisa kelola semua role termasuk Master/Admin/Sales." : currentUser.role === "Admin" ? "Admin hanya bisa kelola role Sales." : "Sales tidak bisa kelola akun."}</p>${
+    currentUser.role !== "Sales"
+      ? `<div class="flex gap-2 mb-3"><button onclick="openForm('users')" class="px-4 py-2 rounded-xl font-bold text-sm" style="background:var(--accent);color:#000">+ Tambah Akun</button></div><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="sticky top-0 z-10 bg-[#0c1322]"><tr><th class="px-3 py-2">Nama</th><th class="px-3 py-2">Username</th><th class="px-3 py-2">Role</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">Aksi</th></tr></thead><tbody>${g(
+          "users",
+        )
+          .map(
+            (u) =>
+              `<tr class="border-t border-white/5"><td class="px-3 py-2 whitespace-nowrap">${u.name}</td><td class="px-3 py-2 whitespace-nowrap font-mono">${u.username}</td><td class="px-3 py-2 whitespace-nowrap">${u.role}</td><td class="px-3 py-2 whitespace-nowrap">${u.active ? "Aktif" : "Nonaktif"}</td><td class="px-3 py-2 whitespace-nowrap flex gap-1"><button onclick="resetPass('${u.username}')" class="px-2 py-1 bg-white/5 rounded text-xs">Reset</button><button onclick="toggleActive('${u.username}')" class="px-2 py-1 bg-amber-500/20 rounded text-xs">Toggle</button><button onclick="delUser('${u.username}')" class="px-2 py-1 bg-red-500/20 rounded text-xs">Hapus</button><button onclick="openForm('users','${u.username}')" class="px-2 py-1 bg-white/5 rounded text-xs">Edit</button></td></tr>`,
+          )
+          .join("")}</tbody></table></div>`
+      : '<div class="opacity-60 text-sm">Hanya Admin/Master</div>'
+  }</div>
+
+  ${
+    currentUser.role === "Master"
+      ? `<div class="card p-5 border border-rose-500/30"><h3 class="font-bold mb-4 text-rose-400">Kontrol Akses Master — Ubah Role & Batasi Menu Per Akun</h3><div class="space-y-4">${g(
+          "users",
+        )
+          .map((u) => {
+            const ac = access[u.username] || {
+              enabled: false,
+              allowed: BASE_MENUS.map((m) => m.id),
+            };
+            return `<div class="bg-white/5 p-3 rounded-xl"><div class="flex flex-wrap items-center gap-2"><span class="font-bold text-sm">${u.name} (${u.username}) - ${u.role}</span><select id="role_${u.username}" class="ml-2 px-2 py-1 rounded bg-[#0c1322] border border-white/10 text-xs"><option ${u.role === "Sales" ? "selected" : ""}>Sales</option><option ${u.role === "Admin" ? "selected" : ""}>Admin</option><option ${u.role === "Master" ? "selected" : ""}>Master</option></select><button onclick="changeRole('${u.username}')" class="px-3 py-1 rounded bg-indigo-500/20 text-xs">Ubah Role</button><label class="ml-4 flex items-center gap-1 text-xs"><input type="checkbox" ${ac.enabled ? "checked" : ""} onchange="toggleAccess('${u.username}',this.checked)"> Aktifkan Batasan Menu</label></div><div class="mt-2 flex flex-wrap gap-1">${BASE_MENUS.map((m) => `<label class="text-[11px] flex items-center gap-1 bg-black/30 px-2 py-1 rounded"><input type="checkbox" ${ac.allowed?.includes(m.id) ? "checked" : ""} onchange="setAccessMenu('${u.username}','${m.id}',this.checked)" ${!ac.enabled ? "disabled" : ""}> ${m.label}</label>`).join("")}</div></div>`;
+          })
+          .join("")}</div></div>`
+      : ""
+  }
+
+  <div class="card p-5"><h3 class="font-bold mb-4">Backup & Restore</h3><div class="flex flex-wrap gap-2"><button onclick="backup()" class="px-4 py-2 rounded-xl bg-white/5">Export JSON</button><label class="px-4 py-2 rounded-xl bg-white/5 cursor-pointer">Restore JSON<input type="file" class="hidden" onchange="restore(event)"></label><button onclick="resetAll()" class="px-4 py-2 rounded-xl bg-red-500/20">Reset & Seed Ulang</button></div></div>
+ </div>`;
+      }
+
+      function saveApp() {
+        const n = document.getElementById("s_name").value,
+          a = document.getElementById("s_accent").value,
+          f = document.getElementById("s_font").value,
+          d = document.getElementById("s_den").value;
+        setObj("app_settings", { appName: n, accent: a, font: f, density: d });
+        toast("Tampilan disimpan");
+        applyTheme();
+        renderApp();
+      }
+      function saveMenu() {
+        const labels = {},
+          icons = {};
+        g("menu_order").forEach((id) => {
+          const lb = document.getElementById("lb_" + id);
+          if (lb) labels[id] = lb.value;
+          const ic = document.getElementById("ic_" + id);
+          if (ic) icons[id] = ic.value;
+        });
+        setObj("menu_labels", labels);
+        setObj("menu_icons", icons);
+        toast("Menu disimpan");
+        renderApp();
+      }
+      function move(id, dir) {
+        let o = g("menu_order");
+        const idx = o.indexOf(id);
+        const n = idx + dir;
+        if (n < 0 || n >= o.length) return;
+        [o[idx], o[n]] = [o[n], o[idx]];
+        s("menu_order", o);
+        renderModule("settings");
+      }
+      function setVis(id, v) {
+        let vis = getObj("menu_visibility");
+        vis[id] = v;
+        setObj("menu_visibility", vis);
+      }
+      function setHeader(k, v) {
+        let h = getObj("header_cfg");
+        h[k] = v;
+        setObj("header_cfg", h);
+        renderApp();
+      }
+      function resetMenu() {
+        localStorage.removeItem("titan_menu_labels");
+        localStorage.removeItem("titan_menu_icons");
+        localStorage.removeItem("titan_menu_order");
+        localStorage.removeItem("titan_menu_visibility");
+        localStorage.removeItem("titan_app_settings");
+        localStorage.removeItem("titan_header_cfg");
+        seed();
+        toast("Reset");
+        renderApp();
+      }
+      function backup() {
+        let obj = {};
+        KEYS.forEach((k) => {
+          obj[k] = JSON.parse(localStorage.getItem("titan_" + k) || "null");
+        });
+        const blob = new Blob([JSON.stringify(obj, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "titan_backup.json";
+        a.click();
+      }
+      function restore(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const r = new FileReader();
+        r.onload = () => {
+          try {
+            const obj = JSON.parse(r.result);
+            Object.keys(obj).forEach((k) =>
+              localStorage.setItem("titan_" + k, JSON.stringify(obj[k])),
+            );
+            toast("Restore berhasil");
+            renderApp();
+          } catch {
+            toast("File invalid", true);
+          }
+        };
+        r.readAsText(file);
+      }
+      function resetAll() {
+        if (!confirm("Reset semua & seed ulang?")) return;
+        KEYS.forEach((k) => localStorage.removeItem("titan_" + k));
+        localStorage.removeItem("titan_current");
+        seed();
+        toast("Reset selesai");
+        renderLogin();
+      }
+      function addCustomMenu() {
+        const id = document.getElementById("cm_id").value.trim(),
+          label = document.getElementById("cm_label").value.trim(),
+          icon = document.getElementById("cm_icon").value;
+        if (!id || !label) return toast("ID & Label wajib", true);
+        let custom = g("custom_menus");
+        if (custom.find((c) => c.id === id)) return toast("ID sudah ada", true);
+        custom.push({
+          id,
+          label,
+          icon,
+          content: `<h1>${label}</h1><p>Isi SOP / info bebas untuk ${label}</p>`,
+        });
+        s("custom_menus", custom);
+        let order = g("menu_order");
+        order.push(id);
+        s("menu_order", order);
+        let vis = getObj("menu_visibility");
+        vis[id] = true;
+        setObj("menu_visibility", vis);
+        toast("Menu kustom ditambah");
+        renderModule("settings");
+      }
+      function delCustom(id) {
+        if (!confirm("Hapus menu kustom " + id + "?")) return;
+        s(
+          "custom_menus",
+          g("custom_menus").filter((c) => c.id !== id),
+        );
+        s(
+          "menu_order",
+          g("menu_order").filter((o) => o !== id),
+        );
+        let vis = getObj("menu_visibility");
+        delete vis[id];
+        setObj("menu_visibility", vis);
+        toast("Dihapus");
+        renderModule("settings");
+      }
+      function editCustom(id) {
+        const cm = g("custom_menus").find((c) => c.id === id);
+        if (!cm) return;
+        openModal(
+          `<h3 class="font-bold mb-3">Edit Isi ${cm.label}</h3><textarea id="cm_content" class="w-full h-64 p-3 rounded-xl bg-white/5 border border-white/10 text-sm">${cm.content}</textarea><div class="flex gap-2 mt-3"><button onclick="saveCustomContent('${id}')" class="flex-1 py-2 rounded-xl font-bold" style="background:var(--accent);color:#000">Simpan</button><button onclick="closeModal()" class="px-6 py-2 rounded-xl bg-white/5">Batal</button></div>`,
+        );
+      }
+      function saveCustomContent(id) {
+        const content = document.getElementById("cm_content").value;
+        let custom = g("custom_menus");
+        custom = custom.map((c) => (c.id === id ? { ...c, content } : c));
+        s("custom_menus", custom);
+        toast("Isi disimpan");
+        closeModal();
+      }
+
+      function changeRole(username) {
+        if (username === currentUser.username)
+          return toast("Tidak bisa ubah role diri sendiri", true);
+        const newRole = document.getElementById("role_" + username).value;
+        let users = g("users");
+        const masters = users.filter((u) => u.role === "Master" && u.active);
+        const target = users.find((u) => u.username === username);
+        if (
+          target.role === "Master" &&
+          newRole !== "Master" &&
+          masters.length <= 1
+        )
+          return toast("Tidak bisa, harus ada minimal 1 Master", true);
+        users = users.map((u) =>
+          u.username === username ? { ...u, role: newRole } : u,
+        );
+        s("users", users);
+        toast("Role diubah ke " + newRole);
+        renderModule("settings");
+      }
+      function toggleAccess(username, en) {
+        let ac = getObj("access_control");
+        if (!ac[username])
+          ac[username] = { enabled: en, allowed: BASE_MENUS.map((m) => m.id) };
+        else ac[username].enabled = en;
+        setObj("access_control", ac);
+        renderModule("settings");
+      }
+      function setAccessMenu(username, menuId, allowed) {
+        let ac = getObj("access_control");
+        if (!ac[username]) return;
+        if (allowed) {
+          if (!ac[username].allowed.includes(menuId))
+            ac[username].allowed.push(menuId);
+        } else {
+          ac[username].allowed = ac[username].allowed.filter(
+            (m) => m !== menuId,
+          );
+        }
+        setObj("access_control", ac);
+      }
+
+      function resetPass(username) {
+        if (!canManage(g("users").find((u) => u.username === username)?.role))
+          return toast("Tidak berwenang", true);
+        const np = prompt("Password baru untuk " + username + ":");
+        if (!np) return;
+        let users = g("users");
+        users = users.map((u) =>
+          u.username === username ? { ...u, password: np } : u,
+        );
+        s("users", users);
+        toast("Password direset");
+      }
+      function toggleActive(username) {
+        if (!canManage(g("users").find((u) => u.username === username)?.role))
+          return toast("Tidak berwenang", true);
+        if (username === currentUser.username)
+          return toast("Tidak bisa nonaktifkan diri sendiri", true);
+        let users = g("users");
+        const target = users.find((u) => u.username === username);
+        if (target.role === "Master") {
+          const masters = users.filter((u) => u.role === "Master" && u.active);
+          if (masters.length <= 1 && target.active)
+            return toast("Harus ada minimal 1 Master aktif", true);
+        }
+        users = users.map((u) =>
+          u.username === username ? { ...u, active: !u.active } : u,
+        );
+        s("users", users);
+        renderModule("settings");
+        if (activeMenu === "akun") renderModule("akun");
+      }
+      function delUser(username) {
+        if (!canManage(g("users").find((u) => u.username === username)?.role))
+          return toast("Tidak berwenang", true);
+        if (username === currentUser.username)
+          return toast("Tidak bisa hapus diri sendiri", true);
+        let users = g("users");
+        const target = users.find((u) => u.username === username);
+        if (target.role === "Master") {
+          const masters = users.filter((u) => u.role === "Master");
+          if (masters.length <= 1)
+            return toast("Tidak bisa hapus satu-satunya Master", true);
+        }
+        if (!confirm("Hapus akun " + username + "?")) return;
+        s(
+          "users",
+          users.filter((u) => u.username !== username),
+        );
+        toast("Akun dihapus");
+        renderModule("settings");
+      }
+
+      function openModal(html) {
+        document.getElementById("modal").innerHTML =
+          `<div class="fixed inset-0 z-50 flex items-center justify-center p-4"><div class="absolute inset-0 bg-black/70" onclick="closeModal()"></div><div class="relative modal glass card w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">${html}</div></div>`;
+        lucide.createIcons();
+      }
+      function closeModal() {
+        document.getElementById("modal").innerHTML = "";
+      }
+      function fileToBase64(f) {
+        return new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result);
+          r.onerror = rej;
+          r.readAsDataURL(f);
+        });
+      }
+
+      function renderModule(id) {
+        const c = document.getElementById("content");
+        if (!c) return;
+        // check access
+        const { ordered } = getVisibleMenusForCurrentUser();
+        if (
+          !ordered.find((m) => m.id === id) &&
+          !g("custom_menus").find((m) => m.id === id)
+        ) {
+          c.innerHTML = `<div class="card p-10 text-center"><h2 class="font-bold text-lg">Akses Ditolak</h2><p class="opacity-60 text-sm mt-2">Menu ${id} dibatasi oleh Master.</p></div>`;
+          return;
+        }
+        if (id === "dashboard") {
+          c.innerHTML = renderDashboard();
+          setTimeout(() => {
+            const fc = filterOwner(g("sales_forecast")).slice(0, 6);
+            const el1 = document.getElementById("c1");
+            if (el1)
+              new Chart(el1, {
+                type: "bar",
+                data: {
+                  labels: fc.map((x) => x.part_no),
+                  datasets: [
+                    {
+                      label: "Target",
+                      data: fc.map((x) => x.t_rp),
+                      backgroundColor: "#10b981",
+                    },
+                    {
+                      label: "Actual",
+                      data: fc.map((x) => x.actual_rp),
+                      backgroundColor: "#06b6d4",
+                    },
+                  ],
+                },
+                options: {
+                  responsive: true,
+                  plugins: { legend: { labels: { color: "#fff" } } },
+                },
+              });
+            const q = filterOwner(g("quotation"));
+            const cnt = {};
+            q.forEach((x) => {
+              cnt[x.po_status] = (cnt[x.po_status] || 0) + 1;
+            });
+            const el2 = document.getElementById("c2");
+            if (el2)
+              new Chart(el2, {
+                type: "doughnut",
+                data: {
+                  labels: Object.keys(cnt),
+                  datasets: [
+                    {
+                      data: Object.values(cnt),
+                      backgroundColor: [
+                        "#10b981",
+                        "#f59e0b",
+                        "#f43f5e",
+                        "#6366f1",
+                      ],
+                    },
+                  ],
+                },
+                options: { plugins: { legend: { labels: { color: "#fff" } } } },
+              });
+          }, 200);
+          return;
+        }
+        if (id === "customer") c.innerHTML = renderCustomer();
+        else if (id === "sales_daily") c.innerHTML = renderSalesDaily();
+        else if (id === "admin_daily") c.innerHTML = renderAdminDaily();
+        else if (id === "pipeline") c.innerHTML = renderPipeline();
+        else if (id === "forecast") c.innerHTML = renderForecast();
+        else if (id === "quotation") c.innerHTML = renderQuotation();
+        else if (id === "trend") c.innerHTML = renderTrend();
+        else if (id === "actual") c.innerHTML = renderActual();
+        else if (id === "doc") c.innerHTML = renderDoc();
+        else if (id === "refreshment") c.innerHTML = renderRefreshment();
+        else if (id === "evaluation") c.innerHTML = renderEvaluation();
+        else if (id === "analytics") c.innerHTML = renderAnalytics();
+        else if (id === "akun") c.innerHTML = renderAkun();
+        else if (id === "settings") c.innerHTML = renderSettings();
+        else {
+          // custom menu
+          const cm = g("custom_menus").find((m) => m.id === id);
+          if (cm) {
+            c.innerHTML = `<div class="card p-6 prose prose-invert max-w-none"><div class="flex justify-between mb-4"><h2 class="font-bold text-xl">${cm.label}</h2><button onclick="editCustom('${cm.id}')" class="px-3 py-1 rounded bg-white/5 text-xs">Edit Isi</button></div><div class="bg-white/5 p-4 rounded-xl">${cm.content}</div></div>`;
+          } else
+            c.innerHTML = `<div class="card p-6">Menu ${id} belum ada render</div>`;
+        }
+        lucide.createIcons();
+      }
+
+      // FORMS
+      function openForm(key, id = null) {
+        const customers = g("customers");
+        const forecasts = g("sales_forecast");
+        const row = id
+          ? g(key).find((r) => r.id === id || r.username === id)
+          : null;
+        let html = `<h3 class="font-bold mb-4">${id ? "Edit" : "Tambah"} ${key}</h3><div class="space-y-3 max-h-[60vh] overflow-y-auto">`;
+        const inp = (n, l, v = "", t = "text", extra = "") =>
+          `<div><label class="text-xs opacity-60">${l}</label><input id="f_${n}" type="${t}" value="${v}" class="w-full mt-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10" ${extra}></div>`;
+        const sel = (n, l, opts, val) =>
+          `<div><label class="text-xs opacity-60">${l}</label><select id="f_${n}" class="w-full mt-1 px-3 py-2 rounded-xl bg-[#0c1322] border border-white/10">${opts.map((o) => `<option ${o === val ? "selected" : ""}>${o}</option>`).join("")}</select></div>`;
+        const custSel = (val) =>
+          `<div><label class="text-xs opacity-60">Customer Code *</label><select id="f_customer_code" onchange="onCust(this.value)" class="w-full mt-1 px-3 py-2 rounded-xl bg-[#0c1322] border border-white/10"><option value="">-- Pilih --</option>${customers.map((c) => `<option value="${c.customer_code}" ${c.customer_code === val ? "selected" : ""}>${c.customer_code} - ${c.pt}</option>`).join("")}</select></div>`;
+        const fcSel = (val) =>
+          `<div><label class="text-xs opacity-60">Referensi Forecast *</label><select id="f_forecast_ref" onchange="onFc(this.value)" class="w-full mt-1 px-3 py-2 rounded-xl bg-[#0c1322] border border-white/10"><option value="">-- Pilih --</option>${forecasts.map((f) => `<option value="${f.id}" ${f.id === val ? "selected" : ""}>${f.part_no} - ${f.pt}</option>`).join("")}</select></div>`;
+        if (key === "customers") {
+          html +=
+            inp("pt", "PT", row?.pt || "") +
+            inp("pic", "PIC", row?.pic || "") +
+            inp("wa", "WA", row?.wa || "") +
+            inp("email", "Email", row?.email || "") +
+            inp("jabatan", "Jabatan", row?.jabatan || "") +
+            inp("site", "Site", row?.site || "") +
+            inp("note", "Note", row?.note || "") +
+            sel(
+              "sales",
+              "Sales",
+              g("users").map((u) => u.username),
+              row?.sales || currentUser.username,
+            );
+        } else if (key === "sales_daily") {
+          html +=
+            custSel(row?.customer_code || "") +
+            sel(
+              "type",
+              "Type",
+              ["Visit", "Call", "Meeting", "Survey", "Delivery"],
+              row?.type || "Visit",
+            ) +
+            inp(
+              "pt",
+              "PT (auto)",
+              row?.pt || "",
+              "text",
+              'id="f_pt" readonly',
+            ) +
+            inp(
+              "pic",
+              "PIC (auto)",
+              row?.pic || "",
+              "text",
+              'id="f_pic" readonly',
+            ) +
+            inp(
+              "wa",
+              "WA (auto)",
+              row?.wa || "",
+              "text",
+              'id="f_wa" readonly',
+            ) +
+            inp(
+              "site",
+              "Site (auto)",
+              row?.site || "",
+              "text",
+              'id="f_site" readonly',
+            ) +
+            sel(
+              "status",
+              "Status",
+              ["Completed", "Pending", "In Progress"],
+              row?.status || "Completed",
+            ) +
+            inp("note", "Note", row?.note || "") +
+            inp("absensi", "Absensi", row?.absensi || "") +
+            `<div><label class="text-xs opacity-60">Foto/File Base64</label><input type="file" id="f_file" class="w-full text-xs mt-1"></div>`;
+        } else if (key === "admin_daily") {
+          html +=
+            custSel(row?.customer_code || "") +
+            sel(
+              "type",
+              "Type",
+              [
+                "PO Input",
+                "Buat Quotation",
+                "Input Quotation Accurate",
+                "Kontrak",
+                "Buat Data",
+                "Lainnya",
+              ],
+              row?.type || "PO Input",
+            ) +
+            inp("ref_no", "Ref No", row?.ref_no || "") +
+            inp(
+              "pt",
+              "PT (auto)",
+              row?.pt || "",
+              "text",
+              'id="f_pt" readonly',
+            ) +
+            inp("dokumen", "Dokumen", row?.dokumen || "") +
+            sel(
+              "status",
+              "Status",
+              ["Draft", "Pending", "Proses", "Selesai", "Ditolak", "Postponed"],
+              row?.status || "Draft",
+            );
+        } else if (key === "pipeline") {
+          html +=
+            custSel(row?.customer_code || "") +
+            inp(
+              "pt",
+              "PT (auto)",
+              row?.pt || "",
+              "text",
+              'id="f_pt" readonly',
+            ) +
+            inp(
+              "sales",
+              "Sales",
+              row?.sales || currentUser.username,
+              "text",
+              'id="f_sales" readonly',
+            ) +
+            sel(
+              "stage",
+              "Stage",
+              [
+                "Market Map",
+                "Lead",
+                "Qualified",
+                "Proposal",
+                "Negotiation",
+                "PO",
+                "Delivery",
+                "Handover",
+              ],
+              row?.stage || "Market Map",
+            ) +
+            inp("value", "Value", row?.value || 100000000, "number") +
+            inp("product", "Product", row?.product || "") +
+            inp("prob", "Prob %", row?.prob || 10, "number");
+        } else if (key === "sales_forecast") {
+          html +=
+            custSel(row?.customer_code || "") +
+            inp(
+              "sales",
+              "Sales (auto)",
+              row?.sales || "",
+              "text",
+              'id="f_sales" readonly',
+            ) +
+            inp(
+              "pt",
+              "PT (auto)",
+              row?.pt || "",
+              "text",
+              'id="f_pt" readonly',
+            ) +
+            inp("part_no", "Part No", row?.part_no || "") +
+            inp("deskripsi", "Deskripsi", row?.deskripsi || "") +
+            inp("periode", "Periode", row?.periode || "2026-09", "month") +
+            inp("t_qty", "T.Qty", row?.t_qty || 0, "number") +
+            inp("t_rp", "T.Rp", row?.t_rp || 0, "number") +
+            inp("actual_qty", "Actual Qty", row?.actual_qty || 0, "number") +
+            inp("actual_rp", "Actual Rp", row?.actual_rp || 0, "number") +
+            inp(
+              "site",
+              "Site",
+              row?.site || "",
+              "text",
+              'id="f_site" readonly',
+            ) +
+            sel(
+              "status",
+              "Status",
+              ["On Track", "Achieved", "Delayed", "At Risk"],
+              row?.status || "On Track",
+            ) +
+            inp("remarks", "Remarks", row?.remarks || "");
+        } else if (key === "quotation") {
+          html +=
+            custSel(row?.customer_code || "") +
+            inp(
+              "quot_no",
+              "Quot No",
+              row?.quot_no || "QT-" + Date.now().toString().slice(-4),
+            ) +
+            inp(
+              "pt",
+              "PT (auto)",
+              row?.pt || "",
+              "text",
+              'id="f_pt" readonly',
+            ) +
+            inp(
+              "tgl_quot",
+              "Tgl Quot",
+              row?.tgl_quot || new Date().toISOString().slice(0, 10),
+              "date",
+            ) +
+            inp("tgl_exp", "Tgl Exp", row?.tgl_exp || "", "date") +
+            inp("part", "Part", row?.part || "") +
+            inp("harga", "Harga", row?.harga || 0, "number") +
+            inp("qty", "Qty", row?.qty || 1, "number") +
+            inp("margin_p", "Margin %", row?.margin_p || 15, "number") +
+            sel(
+              "po_status",
+              "PO Status",
+              ["Pending", "Win", "Loss", "Cancel"],
+              row?.po_status || "Pending",
+            ) +
+            inp("loss", "Loss", row?.loss || 0, "number") +
+            inp("remarks", "Remarks", row?.remarks || "");
+        } else if (key === "forecast_trend") {
+          html +=
+            fcSel(row?.forecast_ref || "") +
+            inp(
+              "pt",
+              "PT (auto)",
+              row?.pt || "",
+              "text",
+              'id="f_pt" readonly',
+            ) +
+            inp(
+              "sales",
+              "Sales (auto)",
+              row?.sales || "",
+              "text",
+              'id="f_sales" readonly',
+            ) +
+            inp(
+              "part_no",
+              "Part No (auto)",
+              row?.part_no || "",
+              "text",
+              'id="f_part_no" readonly',
+            ) +
+            inp("smt1_qty", "SMT1 Qty", row?.smt1_qty || 0, "number") +
+            inp("smt2_qty", "SMT2 Qty", row?.smt2_qty || 0, "number") +
+            inp("actual_2025", "Actual 2025", row?.actual_2025 || 0, "number") +
+            inp(
+              "forecast_2026",
+              "Forecast 2026",
+              row?.forecast_2026 || 0,
+              "number",
+            ) +
+            inp("alasan", "Alasan", row?.alasan || "");
+        } else if (key === "actual_vs_forecast") {
+          html +=
+            custSel(row?.customer_code || "") +
+            inp(
+              "pt",
+              "PT (auto)",
+              row?.pt || "",
+              "text",
+              'id="f_pt" readonly',
+            ) +
+            inp("part_no", "Part No", row?.part_no || "") +
+            inp("target_qty", "Target Qty", row?.target_qty || 0, "number") +
+            inp("actual_qty", "Actual Qty", row?.actual_qty || 0, "number");
+        } else if (key === "documentation") {
+          html +=
+            custSel(row?.customer_code || "") +
+            inp("nama", "Nama Dokumen", row?.nama || "") +
+            `<div><label class="text-xs opacity-60">File Base64</label><input type="file" id="f_file" class="w-full text-xs mt-1"></div>`;
+        } else if (key === "refreshment") {
+          html +=
+            inp(
+              "tanggal",
+              "Tanggal",
+              row?.tanggal || new Date().toISOString().slice(0, 10),
+              "date",
+            ) +
+            sel(
+              "jenis",
+              "Jenis",
+              ["Weekly Brainstorming", "Monthly Test"],
+              row?.jenis || "Weekly Brainstorming",
+            ) +
+            inp("topik", "Topik", row?.topik || "") +
+            inp("durasi", "Durasi Menit", row?.durasi || 30, "number") +
+            inp("peserta", "Peserta", row?.peserta || currentUser.username) +
+            inp("nilai", "Nilai", row?.nilai || "") +
+            inp("ringkasan", "Ringkasan", row?.ringkasan || "") +
+            sel(
+              "status",
+              "Status",
+              ["Terjadwal", "Selesai", "Dibatalkan"],
+              row?.status || "Terjadwal",
+            );
+        } else if (key === "evaluation") {
+          html +=
+            inp("periode", "Periode", row?.periode || "2026-08", "month") +
+            inp("sales", "Sales", row?.sales || currentUser.username) +
+            inp("topik", "Topik/Isu", row?.topik || "") +
+            inp("deskripsi", "Deskripsi", row?.deskripsi || "") +
+            inp("skor", "Skor 1-100", row?.skor || 75, "number") +
+            `<div><label class="text-xs opacity-60">Foto Base64</label><input type="file" id="f_file" accept="image/*" class="w-full text-xs mt-1"></div>` +
+            inp("tindak", "Tindak Lanjut", row?.tindak || "") +
+            sel(
+              "status",
+              "Status",
+              ["Open", "In Progress", "Closed"],
+              row?.status || "Open",
+            );
+        } else if (key === "users") {
+          const isEdit = !!id;
+          html +=
+            inp("name", "Nama Lengkap", row?.name || "") +
+            inp("username", "Username", row?.username || "") +
+            inp("password", "Password", row?.password || "", "password") +
+            sel(
+              "role",
+              "Role",
+              currentUser.role === "Master"
+                ? ["Sales", "Admin", "Master"]
+                : ["Sales"],
+              row?.role || "Sales",
+            ) +
+            inp("securityQ", "Pertanyaan Keamanan", row?.securityQ || "") +
+            inp("securityA", "Jawaban", row?.securityA || "") +
+            sel(
+              "active",
+              "Status",
+              ["Aktif", "Nonaktif"],
+              row?.active ? "Aktif" : "Nonaktif",
+            );
+        }
+        html += `</div><div class="flex gap-2 mt-6"><button onclick="saveForm('${key}','${id || ""}')" class="flex-1 py-3 rounded-xl font-bold" style="background:var(--accent);color:#000">Simpan</button><button onclick="closeModal()" class="px-6 py-3 rounded-xl bg-white/5">Batal</button></div>`;
+        openModal(html);
+      }
+      function onCust(code) {
+        const c = g("customers").find((x) => x.customer_code === code);
+        if (!c) return;
+        const set = (i, v) => {
+          const e = document.getElementById(i);
+          if (e) e.value = v || "";
+        };
+        set("f_pt", c.pt);
+        set("f_pic", c.pic);
+        set("f_wa", c.wa);
+        set("f_site", c.site);
+        set("f_sales", c.sales);
+      }
+      function onFc(id) {
+        const f = g("sales_forecast").find((x) => x.id === id);
+        if (!f) return;
+        const set = (i, v) => {
+          const e = document.getElementById(i);
+          if (e) e.value = v || "";
+        };
+        set("f_pt", f.pt);
+        set("f_sales", f.sales);
+        set("f_part_no", f.part_no);
+      }
+
+      async function saveForm(key, editId) {
+        const gv = (n) => document.getElementById("f_" + n)?.value || "";
+        let data = g(key);
+        let obj = {};
+        if (key === "customers") {
+          obj = {
+            pt: gv("pt"),
+            pic: gv("pic"),
+            wa: gv("wa"),
+            email: gv("email"),
+            jabatan: gv("jabatan"),
+            site: gv("site"),
+            note: gv("note"),
+            sales: gv("sales"),
+          };
+          if (!obj.pt) return toast("PT wajib", true);
+          if (!editId) {
+            const last = data.length
+              ? parseInt(data[data.length - 1].customer_code.split("-")[1])
+              : 0;
+            obj.customer_code = "CUST-" + String(last + 1).padStart(4, "0");
+          }
+        } else if (key === "sales_daily") {
+          const code = gv("customer_code");
+          if (!code) return toast("Pilih Customer Code", true);
+          obj = {
+            customer_code: code,
+            type: gv("type"),
+            pt: gv("pt"),
+            pic: gv("pic"),
+            wa: gv("wa"),
+            site: gv("site"),
+            status: gv("status"),
+            note: gv("note"),
+            absensi: gv("absensi"),
+          };
+          const fe = document.getElementById("f_file");
+          if (fe?.files[0]) {
+            obj.attachment = await fileToBase64(fe.files[0]);
+          }
+        } else if (key === "admin_daily") {
+          const code = gv("customer_code");
+          if (!code) return toast("Customer Code wajib", true);
+          obj = {
+            customer_code: code,
+            type: gv("type"),
+            ref_no: gv("ref_no"),
+            pt: gv("pt"),
+            dokumen: gv("dokumen"),
+            status: gv("status"),
+          };
+        } else if (key === "pipeline") {
+          const code = gv("customer_code");
+          if (!code) return toast("Customer Code wajib", true);
+          obj = {
+            customer_code: code,
+            pt: gv("pt"),
+            sales: gv("sales") || currentUser.username,
+            stage: gv("stage"),
+            value: parseInt(gv("value")) || 0,
+            product: gv("product"),
+            prob: parseInt(gv("prob")) || 10,
+          };
+        } else if (key === "sales_forecast") {
+          const code = gv("customer_code");
+          if (!code) return toast("Customer Code wajib", true);
+          obj = {
+            customer_code: code,
+            sales: gv("sales"),
+            pt: gv("pt"),
+            part_no: gv("part_no"),
+            deskripsi: gv("deskripsi"),
+            periode: gv("periode"),
+            t_qty: parseInt(gv("t_qty")) || 0,
+            t_rp: parseInt(gv("t_rp")) || 0,
+            actual_qty: parseInt(gv("actual_qty")) || 0,
+            actual_rp: parseInt(gv("actual_rp")) || 0,
+            site: gv("site"),
+            status: gv("status"),
+            remarks: gv("remarks"),
+          };
+        } else if (key === "quotation") {
+          const code = gv("customer_code");
+          if (!code) return toast("Customer Code wajib", true);
+          const h = parseInt(gv("harga")) || 0,
+            q = parseInt(gv("qty")) || 0,
+            mp = parseInt(gv("margin_p")) || 0;
+          obj = {
+            customer_code: code,
+            quot_no: gv("quot_no"),
+            pt: gv("pt"),
+            tgl_quot: gv("tgl_quot"),
+            tgl_exp: gv("tgl_exp"),
+            part: gv("part"),
+            harga: h,
+            qty: q,
+            total: h * q,
+            margin_p: mp,
+            margin_rp: Math.round((h * q * mp) / 100),
+            po_status: gv("po_status"),
+            loss: gv("loss"),
+            remarks: gv("remarks"),
+          };
+        } else if (key === "forecast_trend") {
+          obj = {
+            forecast_ref: gv("forecast_ref"),
+            pt: gv("pt"),
+            sales: gv("sales"),
+            part_no: gv("part_no"),
+            smt1_qty: parseInt(gv("smt1_qty")) || 0,
+            smt2_qty: parseInt(gv("smt2_qty")) || 0,
+            actual_2025: parseInt(gv("actual_2025")) || 0,
+            forecast_2026: parseInt(gv("forecast_2026")) || 0,
+            alasan: gv("alasan"),
+          };
+          if (!obj.forecast_ref) return toast("Pilih referensi forecast", true);
+        } else if (key === "actual_vs_forecast") {
+          const code = gv("customer_code");
+          if (!code) return toast("Customer Code wajib", true);
+          obj = {
+            customer_code: code,
+            pt: gv("pt"),
+            part_no: gv("part_no"),
+            target_qty: parseInt(gv("target_qty")) || 0,
+            actual_qty: parseInt(gv("actual_qty")) || 0,
+          };
+        } else if (key === "documentation") {
+          obj = { customer_code: gv("customer_code"), nama: gv("nama") };
+          const fe = document.getElementById("f_file");
+          if (fe?.files[0]) {
+            obj.file = await fileToBase64(fe.files[0]);
+            obj.fileName = fe.files[0].name;
+          }
+        } else if (key === "refreshment") {
+          obj = {
+            tanggal: gv("tanggal"),
+            jenis: gv("jenis"),
+            topik: gv("topik"),
+            durasi: parseInt(gv("durasi")) || 0,
+            peserta: gv("peserta"),
+            nilai: gv("nilai"),
+            ringkasan: gv("ringkasan"),
+            status: gv("status"),
+          };
+        } else if (key === "evaluation") {
+          obj = {
+            periode: gv("periode"),
+            sales: gv("sales"),
+            topik: gv("topik"),
+            deskripsi: gv("deskripsi"),
+            skor: parseInt(gv("skor")) || 0,
+            tindak: gv("tindak"),
+            status: gv("status"),
+          };
+          const fe = document.getElementById("f_file");
+          if (fe?.files[0]) obj.foto = await fileToBase64(fe.files[0]);
+        } else if (key === "users") {
+          const active = gv("active") === "Aktif";
+          const role = gv("role");
+          if (currentUser.role === "Admin" && role !== "Sales")
+            return toast("Admin hanya bisa buat Sales", true);
+          obj = {
+            name: gv("name"),
+            username: gv("username"),
+            password: gv("password"),
+            role,
+            securityQ: gv("securityQ"),
+            securityA: gv("securityA").toLowerCase(),
+            active,
+            createdAt: row?.createdAt || new Date().toISOString(),
+          };
+          if (!obj.username || !obj.password)
+            return toast("Username & password wajib", true);
+          if (editId) {
+            let users = g("users");
+            if (!canManage(users.find((u) => u.username === editId)?.role))
+              return toast("Tidak berwenang", true);
+            if (
+              editId !== obj.username &&
+              users.find((u) => u.username === obj.username)
+            )
+              return toast("Username sudah ada", true);
+            users = users.map((u) =>
+              u.username === editId ? { ...u, ...obj } : u,
+            );
+            s("users", users);
+            toast("Akun diupdate");
+            closeModal();
+            renderModule(activeMenu);
+            return;
+          } else {
+            let users = g("users");
+            if (users.find((u) => u.username === obj.username))
+              return toast("Username ada", true);
+            users.push(obj);
+            s("users", users);
+            toast("Akun ditambah");
+            closeModal();
+            renderModule(activeMenu);
+            return;
+          }
+        }
+        if (editId) {
+          data = data.map((r) => (r.id === editId ? { ...r, ...obj } : r));
+        } else {
+          obj.id = uid();
+          obj.owner = currentUser.username;
+          obj.createdAt = new Date().toISOString();
+          data.push(obj);
+        }
+        s(key, data);
+        toast("Disimpan");
+        closeModal();
+        renderModule(activeMenu);
+      }
+
+      seed();
+      applyTheme();
+      if (currentUser) renderApp();
+      else renderLogin();
+    </script>
+  </body>
+</html>
