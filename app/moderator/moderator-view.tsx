@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Building2, Pencil, Plus, Trash2, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import type { z } from "zod";
-import { deleteUser, saveTenant, saveUserAssignment } from "@/app/actions/moderator";
+import { createUserByModerator, deleteUser, saveTenant, saveUserAssignment } from "@/app/actions/moderator";
 import { RoleBadge } from "@/components/role-badge";
 import { StatusBadge } from "@/components/entity/status-badge";
 import { TextField } from "@/components/form/text-field";
@@ -32,7 +32,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ROLE_LABEL, type Role } from "@/lib/constants";
 import { fmtDateTime } from "@/lib/format";
-import { activateSchema, tenantSchema } from "@/lib/schemas/account";
+import { activateSchema, moderatorCreateSchema, tenantSchema } from "@/lib/schemas/account";
 
 export type ModUser = {
   id: string;
@@ -56,6 +56,7 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
   const [assigning, setAssigning] = useState<ModUser | null>(null);
   const [deleting, setDeleting] = useState<ModUser | null>(null);
   const [tenantEdit, setTenantEdit] = useState<Tenant | "new" | null>(null);
+  const [creating, setCreating] = useState(false);
   const [, start] = useTransition();
 
   const tenantName = useMemo(() => new Map(tenants.map((t) => [t.id, t.name])), [tenants]);
@@ -80,11 +81,16 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
 
       <TabsContent value="users">
         <Card>
-          <CardHeader>
-            <CardTitle>Akun Pengguna</CardTitle>
-            <CardDescription>
-              Akun hasil registrasi menunggu di sini. Aktifkan dengan menentukan company &amp; role.
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Akun Pengguna</CardTitle>
+              <CardDescription>
+                Akun hasil registrasi menunggu di sini. Aktifkan dengan menentukan company &amp; role.
+              </CardDescription>
+            </div>
+            <Button className="font-bold" onClick={() => setCreating(true)}>
+              <Plus /> Akun Baru
+            </Button>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -192,6 +198,7 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
       </TabsContent>
 
       <AssignDialog user={assigning} tenants={tenants} isSelf={assigning?.id === meId} onClose={() => setAssigning(null)} onSaved={() => router.refresh()} />
+      <CreateUserDialog open={creating} tenants={tenants} onClose={() => setCreating(false)} onSaved={() => router.refresh()} />
       <TenantDialog tenant={tenantEdit} onClose={() => setTenantEdit(null)} onSaved={() => router.refresh()} />
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
@@ -370,6 +377,102 @@ function TenantDialog({ tenant, onClose, onSaved }: { tenant: Tenant | "new" | n
         <DialogFooter>
           <Button type="submit" form="tenant-form" disabled={pending} className="font-bold">
             Simpan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type CreateValues = z.input<typeof moderatorCreateSchema>;
+
+function CreateUserDialog({
+  open,
+  tenants,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  tenants: Tenant[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [pending, start] = useTransition();
+  const form = useForm<CreateValues>({ resolver: zodResolver(moderatorCreateSchema) });
+  useEffect(() => {
+    if (open) form.reset({ name: "", username: "", email: "", password: "", role: "sales", tenant_id: "" });
+  }, [open, form]);
+
+  const role = form.watch("role");
+  const tenantErr = form.formState.errors.tenant_id?.message;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Akun Baru</DialogTitle>
+          <DialogDescription>Akun langsung aktif — pengguna tinggal login dengan email &amp; password ini.</DialogDescription>
+        </DialogHeader>
+        <form
+          id="create-user-form"
+          className="space-y-4"
+          onSubmit={form.handleSubmit((v) =>
+            start(async () => {
+              const res = await createUserByModerator(v);
+              if (!res.ok) return void toast.error(res.error);
+              toast.success(res.message);
+              onClose();
+              onSaved();
+            }),
+          )}
+        >
+          <FieldGroup className="gap-4">
+            <TextField form={form} name="name" label="Nama Lengkap" />
+            <TextField form={form} name="username" label="Username" />
+            <TextField form={form} name="email" label="Email" type="email" autoComplete="off" />
+            <TextField form={form} name="password" label="Password Awal" type="password" autoComplete="new-password" />
+            <Field>
+              <FieldLabel>Role</FieldLabel>
+              <Select value={role} onValueChange={(v) => form.setValue("role", v as CreateValues["role"])}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(["sales", "admin", "master", "moderator"] as const).map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {ROLE_LABEL[r]}
+                      {r === "moderator" && " (platform, tanpa company)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            {role !== "moderator" && (
+              <Field data-invalid={!!tenantErr}>
+                <FieldLabel>Company / Tenant</FieldLabel>
+                <Select
+                  value={form.watch("tenant_id") || undefined}
+                  onValueChange={(v) => form.setValue("tenant_id", v, { shouldValidate: true })}
+                >
+                  <SelectTrigger className="w-full" aria-invalid={!!tenantErr}>
+                    <SelectValue placeholder="-- Pilih company --" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tenants.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name} ({t.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {tenantErr && <FieldError>{tenantErr}</FieldError>}
+              </Field>
+            )}
+          </FieldGroup>
+        </form>
+        <DialogFooter>
+          <Button type="submit" form="create-user-form" disabled={pending} className="font-bold">
+            Buat Akun
           </Button>
         </DialogFooter>
       </DialogContent>

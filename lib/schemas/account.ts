@@ -41,3 +41,15 @@ export const tenantSchema = z.object({
     .toUpperCase()
     .regex(/^[A-Z0-9-]{2,20}$/, "Kode 2-20 karakter: huruf besar, angka, atau -"),
 });
+
+/** Akun baru dibuat moderator → langsung aktif, tinggal login. */
+export const moderatorCreateSchema = z
+  .object({
+    name: z.string().trim().min(2, "Nama minimal 2 karakter").max(100),
+    username: usernameSchema,
+    email: z.email("Email tidak valid"),
+    password: z.string().min(8, "Password minimal 8 karakter").max(72),
+    role: z.enum(["moderator", "sales", "admin", "master"]),
+    tenant_id: z.union([z.guid(), z.literal(""), z.null()]).transform((v) => v || null),
+  })
+  .refine((v) => v.role === "moderator" || v.tenant_id, { path: ["tenant_id"], message: "Pilih company/tenant" });
