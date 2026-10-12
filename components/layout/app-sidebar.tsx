@@ -2,9 +2,9 @@
 
 import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { SearchIcon, XIcon } from "lucide-react";
+import { Loader2, SearchIcon, XIcon } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -34,6 +34,19 @@ export type AppSidebarProps = {
   menus: SidebarMenuItemData[];
   user: NavUserProps["user"];
 };
+
+/**
+ * Ikon menu yang berubah jadi spinner selama navigasi tertunda (prefetch belum selesai),
+ * supaya klik langsung terasa direspons. Harus dirender di dalam <Link>.
+ */
+function NavIcon({ name, active }: { name: string; active: boolean }) {
+  const { pending } = useLinkStatus();
+  return pending ? (
+    <Loader2 className="animate-spin text-primary" aria-hidden />
+  ) : (
+    <MenuIcon name={name} className={cn(active && "text-primary")} />
+  );
+}
 
 /** Menu aktif: href sama persis atau sub-path-nya. */
 export const isActiveHref = (pathname: string, href: string) =>
@@ -147,7 +160,7 @@ export function AppSidebar({
                           if (isMobile) setOpenMobile(false);
                         }}
                       >
-                        <MenuIcon name={m.icon} className={cn(active && "text-primary")} />
+                        <NavIcon name={m.icon} active={active} />
                         <span className="truncate">{m.label}</span>
                       </Link>
                     </SidebarMenuButton>
