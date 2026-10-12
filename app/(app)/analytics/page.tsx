@@ -1,7 +1,24 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Content } from "@/components/content";
 import { requireMenu } from "@/lib/auth";
 import { fmtJuta, fmtNumber, toNumber } from "@/lib/format";
 import { RankBar } from "../dashboard/charts";
+
+function RankList({ items, format, mono }: { items: { name: string; value: number }[]; format: (v: number) => string; mono?: boolean }) {
+  if (!items.length) return null;
+  return (
+    <ol className="divide-y rounded-md border">
+      {items.map((s, i) => (
+        <li key={s.name} className="flex items-center gap-3 px-3 py-2 text-sm">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold tabular-nums">
+            {i + 1}
+          </span>
+          <span className={mono ? "truncate font-mono text-xs" : "truncate"}>{s.name}</span>
+          <span className="ml-auto font-medium tabular-nums">{format(s.value)}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export default async function AnalyticsPage() {
   const { supabase } = await requireMenu("analytics");
@@ -27,43 +44,19 @@ export default async function AnalyticsPage() {
   const topPart = top(byPart);
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>Top Sales (Actual Rp)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <>
+      <Content size="md" title="Top Sales" description="5 sales dengan Actual Rp tertinggi">
+        <div className="space-y-4">
           <RankBar data={topSales} money />
-          <ol className="space-y-1">
-            {topSales.map((s, i) => (
-              <li key={s.name} className="flex justify-between rounded-md bg-muted p-2 text-sm">
-                <span>
-                  #{i + 1} {s.name}
-                </span>
-                <span className="tabular-nums">{fmtJuta(s.value, 1)}</span>
-              </li>
-            ))}
-          </ol>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Top Sparepart (Actual Qty)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          <RankList items={topSales} format={(v) => fmtJuta(v, 1)} />
+        </div>
+      </Content>
+      <Content size="md" title="Top Sparepart" description="5 part dengan Actual Qty tertinggi">
+        <div className="space-y-4">
           <RankBar data={topPart} />
-          <ol className="space-y-1">
-            {topPart.map((p, i) => (
-              <li key={p.name} className="flex justify-between rounded-md bg-muted p-2 text-sm">
-                <span className="font-mono">
-                  #{i + 1} {p.name}
-                </span>
-                <span className="tabular-nums">{fmtNumber(p.value)}</span>
-              </li>
-            ))}
-          </ol>
-        </CardContent>
-      </Card>
-    </div>
+          <RankList items={topPart} format={fmtNumber} mono />
+        </div>
+      </Content>
+    </>
   );
 }

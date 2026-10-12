@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { Hourglass } from "lucide-react";
+import { Hourglass, LogOut } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { logout } from "@/app/actions/auth";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 
 export default async function PendingPage() {
   const session = await getSession();
@@ -12,22 +12,24 @@ export default async function PendingPage() {
     redirect(session.profile.role === "moderator" ? "/moderator" : "/dashboard");
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardContent className="space-y-4 text-center">
-          <Hourglass className="mx-auto size-10 text-brand-text" />
-          <h1 className="text-lg font-bold">Akun menunggu aktivasi</h1>
+    <AuthShell>
+      <div className="flex flex-col items-center gap-4 text-center">
+        <span className="flex size-12 items-center justify-center rounded-full bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+          <Hourglass className="size-6" />
+        </span>
+        <div className="space-y-1.5">
+          <h1 className="text-2xl font-semibold tracking-tight">Akun menunggu aktivasi</h1>
           <p className="text-sm text-muted-foreground">
-            Halo {session.profile?.name ?? session.user.email}. Akun Anda belum aktif atau belum ditempatkan di
-            perusahaan. Moderator akan mengaktifkannya.
+            Halo <span className="font-medium text-foreground">{session.profile?.name ?? session.user.email}</span>. Akun
+            Anda belum aktif atau belum ditempatkan di perusahaan. Moderator akan mengaktifkannya.
           </p>
-          <form action={logout}>
-            <Button variant="secondary" type="submit">
-              Logout
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        <form action={logout} className="w-full">
+          <Button variant="outline" type="submit" className="w-full">
+            <LogOut /> Keluar
+          </Button>
+        </form>
+      </div>
+    </AuthShell>
   );
 }

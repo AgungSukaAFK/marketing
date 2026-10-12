@@ -1,32 +1,37 @@
-import { LogOut, ShieldCheck } from "lucide-react";
-import { logout } from "@/app/actions/auth";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
+import Image from "next/image";
+import { AccentThemeSwitcher } from "@/components/accent-theme-switcher";
+import { FontSwitcher } from "@/components/font-switcher";
+import { ThemeSwitcher } from "@/components/theme-switcher";
+import { UserMenu } from "@/components/layout/user-menu";
+import { Separator } from "@/components/ui/separator";
 import { requireModerator } from "@/lib/auth";
+import { DEFAULT_APP_NAME } from "@/lib/constants";
 
 export default async function ModeratorLayout({ children }: { children: React.ReactNode }) {
-  const { profile } = await requireModerator();
+  const { profile, user } = await requireModerator();
   return (
     <div className="min-h-svh">
-      <header className="glass sticky top-0 z-20 flex items-center justify-between border-b px-4 py-3 md:px-6">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="size-5 text-brand-text" />
-          <div>
-            <h1 className="font-bold leading-tight text-brand-text">TITAN APEX — Moderator</h1>
-            <p className="text-[10px] tracking-widest text-muted-foreground">PLATFORM CONTROL</p>
+      <header className="no-print sticky top-0 z-20 border-b bg-background">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <Image src="/icons/icon-192.png" alt="" width={32} height={32} className="size-8 rounded-md" />
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-sm font-semibold">{DEFAULT_APP_NAME}</p>
+              <p className="truncate text-xs text-muted-foreground">Moderator · Platform Control</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-0.5">
+            <AccentThemeSwitcher />
+            <FontSwitcher />
+            <ThemeSwitcher />
+            <Separator orientation="vertical" className="mx-1.5 data-[orientation=vertical]:h-5" />
+            <UserMenu name={profile?.name ?? user.email ?? "-"} email={user.email ?? ""} role="moderator" />
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <span className="hidden text-xs md:inline">{profile?.name}</span>
-          <form action={logout}>
-            <Button variant="secondary" size="sm" type="submit">
-              <LogOut /> <span className="hidden md:inline">Logout</span>
-            </Button>
-          </form>
-        </div>
       </header>
-      <main className="fade-in mx-auto max-w-7xl p-4 md:p-6">{children}</main>
+      <main className="mx-auto max-w-7xl p-4 md:py-6">
+        <div className="grid auto-rows-auto grid-cols-12 items-start gap-4 md:gap-6">{children}</div>
+      </main>
     </div>
   );
 }

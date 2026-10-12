@@ -1,33 +1,46 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Manrope, Outfit, Space_Grotesk } from "next/font/google";
-import { ThemeProvider } from "@/components/theme-provider";
+import { CustomThemeProvider } from "@/lib/theme-provider";
+import { fontVariables } from "@/lib/fonts";
+import { fontInitScript } from "@/lib/font-options";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { APP_TAGLINE, DEFAULT_APP_NAME } from "@/lib/constants";
 import "./globals.css";
 
-const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
-const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"] });
-const spaceGrotesk = Space_Grotesk({ variable: "--font-space-grotesk", subsets: ["latin"] });
-const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin"] });
-const outfit = Outfit({ variable: "--font-outfit", subsets: ["latin"] });
-
 export const metadata: Metadata = {
-  title: "TITAN APEX V4 — Industrial & Mining CRM",
+  title: { default: `${DEFAULT_APP_NAME} — ${APP_TAGLINE}`, template: `%s · ${DEFAULT_APP_NAME}` },
   description: "CRM sales & marketing untuk industri dan pertambangan",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    // iOS belum support SVG untuk apple-touch-icon, tetap pakai PNG
+    apple: "/icons/icon-192.png",
+  },
 };
+
+export const viewport = { themeColor: "#0f172a" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="id"
-      suppressHydrationWarning
-      className={`${inter.variable} ${jetbrains.variable} ${spaceGrotesk.variable} ${manrope.variable} ${outfit.variable} h-full antialiased`}
-    >
-      <body className="min-h-full">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+    <html lang="id" className={fontVariables} suppressHydrationWarning>
+      <head>
+        {/* aksen, font & ukuran tersimpan dipasang sebelum render (anti-flash) */}
+        <script dangerouslySetInnerHTML={{ __html: fontInitScript }} />
+      </head>
+      <body className="antialiased">
+        <CustomThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          themes={["light", "dark", "soft-light", "soft-dark"]}
+          disableTransitionOnChange
+        >
           <TooltipProvider>{children}</TooltipProvider>
-          <Toaster position="top-right" richColors />
-        </ThemeProvider>
+          <Toaster richColors position="bottom-right" />
+        </CustomThemeProvider>
       </body>
     </html>
   );

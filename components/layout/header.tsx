@@ -3,16 +3,26 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ChevronDown, Clock, LogOut, Menu } from "lucide-react";
-import { logout } from "@/app/actions/auth";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ChevronDown, Clock, Users } from "lucide-react";
+import { AccentThemeSwitcher } from "@/components/accent-theme-switcher";
+import { FontSwitcher } from "@/components/font-switcher";
+import { ThemeSwitcher } from "@/components/theme-switcher";
+import { isActiveHref, type SidebarMenuItemData } from "@/components/layout/app-sidebar";
 import { useOnlineUsers } from "@/components/layout/presence-provider";
-import { SidebarContent, type SidebarProps } from "@/components/layout/sidebar";
-import { Badge } from "@/components/ui/badge";
+import { RoleBadge } from "@/components/role-badge";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { ROLE_LABEL, type HeaderCfg } from "@/lib/constants";
+import { Separator } from "@/components/ui/separator";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import type { HeaderCfg, Role } from "@/lib/constants";
 
 function WibClock() {
   const [now, setNow] = useState<string | null>(null);
@@ -31,10 +41,22 @@ function WibClock() {
     return () => clearInterval(t);
   }, []);
   return (
-    <div className="hidden items-center gap-2 text-xs text-muted-foreground tabular-nums md:flex">
-      <Clock className="size-4" />
-      <span suppressHydrationWarning>{now ?? "--:--:-- WIB"}</span>
+    <div className="hidden items-center gap-1.5 px-2 text-xs text-muted-foreground tabular-nums md:flex">
+      <Clock className="size-3.5" />
+      <span suppressHydrationWarning>{now ?? "--.--.-- WIB"}</span>
     </div>
+  );
+}
+
+function LiveBadge() {
+  return (
+    <span className="hidden items-center gap-1.5 rounded-full border bg-background px-2.5 py-0.5 text-xs font-medium shadow-xs md:inline-flex">
+      <span className="relative flex size-2">
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-500 opacity-60 motion-reduce:animate-none" />
+        <span className="relative inline-flex size-2 rounded-full bg-green-500" />
+      </span>
+      Live
+    </span>
   );
 }
 
@@ -43,28 +65,32 @@ function OnlineWidget() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="secondary" size="sm" className="gap-1.5">
-          <span className="size-2 rounded-full bg-brand" /> Online {online.length}
-          <ChevronDown className="size-3" />
+        <Button variant="ghost" size="sm" title="Akun online" className="gap-1.5">
+          <Users className="text-muted-foreground" size={16} />
+          <span className="tabular-nums">{online.length}</span>
+          <span className="hidden sm:inline">Online</span>
+          <ChevronDown className="size-3.5 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-72">
-        <h4 className="mb-2 text-xs font-bold">Akun Online ({online.length})</h4>
+      <PopoverContent align="end" className="w-72 p-3">
+        <p className="mb-2 text-xs font-medium text-muted-foreground">Akun Online ({online.length})</p>
         <div className="max-h-64 space-y-1 overflow-y-auto">
           {online.length ? (
             online.map((o) => (
-              <div key={o.user_id} className="flex justify-between rounded-md bg-muted p-2 text-xs">
-                <span>
-                  {o.name} ({ROLE_LABEL[o.role as keyof typeof ROLE_LABEL] ?? o.role})
+              <div key={o.user_id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent">
+                <span className="size-2 shrink-0 rounded-full bg-green-500" />
+                <span className="min-w-0 flex-1 truncate">{o.name}</span>
+                <RoleBadge role={o.role as Role} />
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {new Date(o.online_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
                 </span>
-                <span className="text-muted-foreground">{new Date(o.online_at).toLocaleTimeString("id-ID")}</span>
               </div>
             ))
           ) : (
-            <p className="text-xs text-muted-foreground">Tidak ada</p>
+            <p className="py-4 text-center text-sm text-muted-foreground">Tidak ada akun online</p>
           )}
         </div>
-        <Button asChild size="sm" className="mt-2 w-full font-bold">
+        <Button asChild size="sm" variant="outline" className="mt-3 w-full">
           <Link href="/accounts">Lihat Riwayat Login</Link>
         </Button>
       </PopoverContent>
@@ -72,52 +98,57 @@ function OnlineWidget() {
   );
 }
 
-export function Header({ sidebar, headerCfg }: { sidebar: SidebarProps; headerCfg: HeaderCfg }) {
+export function Header({
+  appName,
+  menus,
+  role,
+  headerCfg,
+}: {
+  appName: string;
+  menus: SidebarMenuItemData[];
+  role: Role;
+  headerCfg: HeaderCfg;
+}) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const title = sidebar.menus.find((m) => pathname === m.href || pathname.startsWith(m.href + "/"))?.label ?? "";
-  const isManager = sidebar.role === "master" || sidebar.role === "admin";
+  const current =
+    menus.find((m) => isActiveHref(pathname, m.href))?.label ?? (pathname.startsWith("/forbidden") ? "Akses Ditolak" : "");
+  const isManager = role === "master" || role === "admin";
 
   return (
-    <header className="glass sticky top-0 z-20 flex items-center justify-between gap-3 border-b px-4 py-3 md:px-6">
-      <div className="flex min-w-0 items-center gap-3">
-        <Button variant="secondary" size="icon" className="lg:hidden" onClick={() => setOpen(true)} aria-label="Menu">
-          <Menu />
-        </Button>
-        <h2 className="truncate text-base font-bold md:text-lg">{title}</h2>
+    <header className="no-print sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b bg-background transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+      <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
+        <SidebarTrigger className="-ml-1" />
+        <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+        <Breadcrumb className="min-w-0">
+          <BreadcrumbList className="flex-nowrap">
+            <BreadcrumbItem className="hidden md:block">
+              <BreadcrumbLink asChild>
+                <Link href="/dashboard">{appName}</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            {current && (
+              <>
+                <BreadcrumbSeparator className="hidden md:block" />
+                <BreadcrumbItem className="min-w-0">
+                  <BreadcrumbPage className="truncate">{current}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
+            )}
+          </BreadcrumbList>
+        </Breadcrumb>
       </div>
-      <div className="flex items-center gap-2 md:gap-3">
+      <div className="flex shrink-0 items-center gap-0.5 pr-3 md:pr-4">
         {headerCfg.showClock && <WibClock />}
-        {headerCfg.showBadge && (
-          <Badge variant="outline" className="hidden border-brand/40 text-brand-text md:inline-flex">
-            Live
-          </Badge>
-        )}
-        {headerCfg.showTheme && <ThemeToggle />}
+        {headerCfg.showBadge && <LiveBadge />}
         {headerCfg.showOnline && isManager && <OnlineWidget />}
-        <div className="flex items-center gap-2">
-          <div className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-            {sidebar.userName.charAt(0).toUpperCase()}
-          </div>
-          <div className="hidden text-xs leading-tight md:block">
-            <div className="font-bold">{sidebar.userName}</div>
-            <div className="text-muted-foreground">{ROLE_LABEL[sidebar.role]}</div>
-          </div>
-          <form action={logout}>
-            <Button variant="secondary" size="sm" type="submit" className="ml-1">
-              <LogOut className="md:hidden" />
-              <span className="hidden md:inline">Logout</span>
-            </Button>
-          </form>
-        </div>
+        {headerCfg.showTheme && (
+          <>
+            <AccentThemeSwitcher />
+            <FontSwitcher />
+            <ThemeSwitcher />
+          </>
+        )}
       </div>
-
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="left" className="w-72 p-0">
-          <SheetTitle className="sr-only">Navigasi</SheetTitle>
-          <SidebarContent {...sidebar} onNavigate={() => setOpen(false)} />
-        </SheetContent>
-      </Sheet>
     </header>
   );
 }

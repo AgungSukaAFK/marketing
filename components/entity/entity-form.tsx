@@ -3,9 +3,13 @@
 import { useState, useTransition } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { saveEntity } from "@/app/actions/entity";
-import { Combobox } from "@/components/form/combobox";
+import { AffixInput } from "@/components/form/affix-input";
+import { DatePicker } from "@/components/form/date-picker";
+import { MonthPicker } from "@/components/form/month-picker";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,6 +34,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  SearchableSelect,
+  SearchableSelectContent,
+  SearchableSelectItem,
+  SearchableSelectTrigger,
+  SearchableSelectValue,
+} from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { STORAGE_BUCKET } from "@/lib/constants";
@@ -151,16 +162,18 @@ function EntityFormBody({
         {f.required && <span className="text-destructive">*</span>}
       </FieldLabel>
     );
+    const setValue = (v: string) => form.setValue(f.name, v, { shouldValidate: true });
     let control: React.ReactNode;
     switch (f.type) {
       case "customer":
         control = (
-          <Combobox
+          <OptionSelect
             id={`f_${f.name}`}
             value={values[f.name] ?? ""}
             onChange={onCustomerChange}
             invalid={!!err}
             allowEmpty={!f.required}
+            placeholder="-- Pilih customer --"
             options={lookups.customers.map((c) => ({
               value: c.id,
               label: `${c.customer_code} - ${c.pt}`,
@@ -170,11 +183,12 @@ function EntityFormBody({
         break;
       case "forecast":
         control = (
-          <Combobox
+          <OptionSelect
             id={`f_${f.name}`}
             value={values[f.name] ?? ""}
-            onChange={(v) => form.setValue(f.name, v, { shouldValidate: true })}
+            onChange={setValue}
             invalid={!!err}
+            placeholder="-- Pilih forecast --"
             options={lookups.forecasts.map((x) => ({
               value: x.id,
               label: `${x.part_no} - ${x.customer?.pt ?? "?"}`,
@@ -183,40 +197,25 @@ function EntityFormBody({
         );
         break;
       case "user":
-      case "select": {
-        const opts =
-          f.type === "user"
-            ? lookups.profiles.map((p) => ({
-                value: p.id,
-                label: `${p.name} (${p.username})`,
-              }))
-            : (f.options ?? []).map((o) => ({ value: o, label: o }));
+      case "select":
         control = (
-          <Select
-            value={values[f.name] || undefined}
-            onValueChange={(v) =>
-              form.setValue(f.name, v, { shouldValidate: true })
-            }
+          <OptionSelect
+            id={`f_${f.name}`}
+            value={values[f.name] ?? ""}
+            onChange={setValue}
+            invalid={!!err}
             disabled={f.type === "user" && isSales}
-          >
-            <SelectTrigger
-              id={`f_${f.name}`}
-              className="w-full"
-              aria-invalid={!!err}
-            >
-              <SelectValue placeholder="-- Pilih --" />
-            </SelectTrigger>
-            <SelectContent>
-              {opts.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={
+              f.type === "user"
+                ? lookups.profiles.map((p) => ({
+                    value: p.id,
+                    label: `${p.name} (${p.username})`,
+                  }))
+                : (f.options ?? []).map((o) => ({ value: o, label: o }))
+            }
+          />
         );
         break;
-      }
       case "textarea":
         control = (
           <Textarea
@@ -227,6 +226,26 @@ function EntityFormBody({
           />
         );
         break;
+      case "date":
+        control = (
+          <DatePicker
+            id={`f_${f.name}`}
+            value={values[f.name] ?? ""}
+            onChange={setValue}
+            invalid={!!err}
+          />
+        );
+        break;
+      case "month":
+        control = (
+          <MonthPicker
+            id={`f_${f.name}`}
+            value={values[f.name] ?? ""}
+            onChange={setValue}
+            invalid={!!err}
+          />
+        );
+        break;
       case "file":
         control = (
           <>
@@ -234,6 +253,7 @@ function EntityFormBody({
               id={`f_${f.name}`}
               type="file"
               accept={f.accept}
+              className="cursor-pointer file:mr-3 file:cursor-pointer"
               onChange={(e) =>
                 setFiles((s) => ({
                   ...s,
@@ -244,19 +264,51 @@ function EntityFormBody({
             {row && f.pathField && row[f.pathField] && (
               <FieldDescription>
                 File saat ini:{" "}
-                {(f.nameField && row[f.nameField]) || "terlampir"} — pilih file
-                baru untuk mengganti.
+                <span className="font-medium text-foreground">
+                  {(f.nameField && row[f.nameField]) || "terlampir"}
+                </span>{" "}
+                — pilih file baru untuk mengganti.
               </FieldDescription>
             )}
           </>
+        );
+        break;
+      case "number":
+        control = f.money ? (
+          <CurrencyInput
+            id={`f_${f.name}`}
+            value={Number(values[f.name]) || 0}
+            onValueChange={(n) => setValue(n ? String(n) : "")}
+            aria-invalid={!!err}
+            inputMode="numeric"
+          />
+        ) : f.suffix ? (
+          <AffixInput
+            id={`f_${f.name}`}
+            type="number"
+            step="any"
+            inputMode="decimal"
+            suffix={f.suffix}
+            aria-invalid={!!err}
+            {...form.register(f.name)}
+          />
+        ) : (
+          <Input
+            id={`f_${f.name}`}
+            type="number"
+            step="any"
+            inputMode="decimal"
+            className="text-right tabular-nums"
+            aria-invalid={!!err}
+            {...form.register(f.name)}
+          />
         );
         break;
       default:
         control = (
           <Input
             id={`f_${f.name}`}
-            type={f.type === "number" ? "number" : f.type}
-            step={f.type === "number" ? "any" : undefined}
+            type={f.type}
             aria-invalid={!!err}
             {...form.register(f.name)}
           />
@@ -306,20 +358,25 @@ function EntityFormBody({
         <DialogTitle>
           {row ? "Edit" : "Tambah"} — {def.title}
         </DialogTitle>
-        <DialogDescription>Field bertanda * wajib diisi.</DialogDescription>
+        <DialogDescription>
+          Field bertanda <span className="text-destructive">*</span> wajib
+          diisi.
+        </DialogDescription>
       </DialogHeader>
       <form id="entity-form" onSubmit={submit} noValidate>
         <FieldGroup className="grid gap-4 sm:grid-cols-2">
           {def.fields.map(renderField)}
         </FieldGroup>
         {preview && (
-          <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-brand/30 bg-brand/5 p-3 text-sm">
+          <div className="mt-5 grid grid-cols-2 gap-3 rounded-lg border bg-muted/50 p-3 dark:bg-muted/10">
             {preview.map((p) => (
               <div key={p.label}>
-                <div className="text-xs text-muted-foreground">
-                  {p.label} (otomatis)
+                <div className="text-xs font-medium text-muted-foreground">
+                  {p.label} <span className="font-normal">(otomatis)</span>
                 </div>
-                <div className="font-bold">{p.value}</div>
+                <div className="text-sm font-semibold tabular-nums">
+                  {p.value}
+                </div>
               </div>
             ))}
           </div>
@@ -327,18 +384,14 @@ function EntityFormBody({
       </form>
       <DialogFooter>
         <Button
-          variant="secondary"
+          variant="outline"
           onClick={() => onOpenChange(false)}
           type="button"
         >
           Batal
         </Button>
-        <Button
-          type="submit"
-          form="entity-form"
-          disabled={pending}
-          className="font-bold"
-        >
+        <Button type="submit" form="entity-form" disabled={pending}>
+          {pending && <Loader2 className="animate-spin" />}
           {pending ? "Menyimpan…" : "Simpan"}
         </Button>
       </DialogFooter>
@@ -348,13 +401,90 @@ function EntityFormBody({
 
 function AutoInfo({ items }: { items: [string, string | null | undefined][] }) {
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg bg-muted p-2 text-xs">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-md border bg-muted/50 px-2.5 py-2 text-xs dark:bg-muted/10">
       {items.map(([k, v]) => (
-        <div key={k} className="truncate">
-          <span className="text-muted-foreground">{k} (auto): </span>
-          {v || "-"}
+        <div key={k} className="truncate" title={v ?? undefined}>
+          <span className="text-muted-foreground">{k}: </span>
+          <span className="font-medium">{v || "-"}</span>
         </div>
       ))}
     </div>
+  );
+}
+
+const EMPTY = "__empty__";
+
+/** Select pilihan: > 7 opsi pakai SearchableSelect (styling-guide §8). */
+function OptionSelect({
+  id,
+  value,
+  onChange,
+  options,
+  invalid,
+  disabled,
+  allowEmpty,
+  placeholder = "-- Pilih --",
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  invalid?: boolean;
+  disabled?: boolean;
+  allowEmpty?: boolean;
+  placeholder?: string;
+}) {
+  const handle = (v: string) => onChange(v === EMPTY ? "" : v);
+  if (options.length > 7) {
+    return (
+      <SearchableSelect
+        value={value}
+        onValueChange={handle}
+        disabled={disabled}
+      >
+        <SearchableSelectTrigger
+          id={id}
+          className="w-full"
+          aria-invalid={invalid}
+        >
+          <SearchableSelectValue placeholder={placeholder} />
+        </SearchableSelectTrigger>
+        <SearchableSelectContent>
+          {allowEmpty && (
+            <SearchableSelectItem value={EMPTY}>
+              <span className="text-muted-foreground">(Kosong)</span>
+            </SearchableSelectItem>
+          )}
+          {options.map((o) => (
+            <SearchableSelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SearchableSelectItem>
+          ))}
+        </SearchableSelectContent>
+      </SearchableSelect>
+    );
+  }
+  return (
+    <Select
+      value={value || undefined}
+      onValueChange={handle}
+      disabled={disabled}
+    >
+      <SelectTrigger id={id} className="w-full" aria-invalid={invalid}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {allowEmpty && (
+          <SelectItem value={EMPTY}>
+            <span className="text-muted-foreground">(Kosong)</span>
+          </SelectItem>
+        )}
+        {options.map((o) => (
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

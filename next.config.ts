@@ -5,7 +5,7 @@ const supabaseWs = supabaseUrl.replace(/^http/, "ws");
 const isDev = process.env.NODE_ENV !== "production";
 
 // CSP (planning §7). 'unsafe-inline' untuk script/style dibutuhkan oleh skrip inline Next.js,
-// next-themes, dan <style> aksen per tenant. Konten user tetap aman karena React meng-escape
+// next-themes, dan script anti-flash aksen/font (lib/font-options.ts). Konten user tetap aman karena React meng-escape
 // teks dan HTML menu kustom disanitasi DOMPurify.
 const csp = [
   "default-src 'self'",
@@ -22,11 +22,6 @@ const csp = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  // Foto landing page (Unsplash License — bebas dipakai, tanpa atribusi wajib).
-  // Disajikan lewat /_next/image sehingga CSP img-src 'self' tetap cukup.
-  images: {
-    remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com", pathname: "/photo-**" }],
-  },
   async headers() {
     return [
       {

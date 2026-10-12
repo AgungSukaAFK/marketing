@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { HeaderCfg, Role, TenantRole } from "@/lib/constants";
+import { DEFAULT_APP_NAME, type HeaderCfg, type Role, type TenantRole } from "@/lib/constants";
 import { visibleMenus, type AccessRow, type CustomMenuRow, type MenuConfig } from "@/lib/menus";
 
 export type Profile = {
@@ -73,9 +73,9 @@ export const getAppContext = cache(async () => {
     ...session,
     tenant: tenant.data!,
     settings: settings.data ?? {
-      app_name: "TITAN APEX V4",
-      accent: "Emerald",
-      font: "Inter",
+      app_name: DEFAULT_APP_NAME,
+      accent: "zinc",
+      font: "geist",
       density: "Nyaman" as const,
       header_cfg: { showClock: true, showBadge: true, showTheme: true, showOnline: true },
     },

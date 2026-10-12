@@ -9,15 +9,18 @@ export default async function ForbiddenPage({ searchParams }: PageProps<"/forbid
   const { menus } = await getAppContext();
   const home = menus[0];
   return (
-    <Card className="mx-auto max-w-lg">
-      <CardContent className="space-y-3 py-6 text-center">
-        <ShieldX className="mx-auto size-10 text-destructive" />
-        <h2 className="text-lg font-bold">Akses Ditolak</h2>
+    <Card className="col-span-12 mx-auto w-full max-w-lg">
+      <CardContent className="flex flex-col items-center gap-3 py-4 text-center">
+        <span className="flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+          <ShieldX className="size-6" />
+        </span>
+        <h1 className="text-lg font-semibold">Akses Ditolak</h1>
         <p className="text-sm text-muted-foreground">
-          Menu {typeof menu === "string" ? <b>{menu}</b> : "ini"} disembunyikan atau dibatasi oleh Master.
+          Menu {typeof menu === "string" ? <span className="font-medium text-foreground">{menu}</span> : "ini"}{" "}
+          disembunyikan atau dibatasi oleh Master.
         </p>
         {home && (
-          <Button asChild variant="secondary">
+          <Button asChild variant="outline" size="sm">
             <Link href={home.href}>Buka {home.label}</Link>
           </Button>
         )}

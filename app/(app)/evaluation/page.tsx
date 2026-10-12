@@ -1,5 +1,5 @@
 import { EntityPage } from "@/components/entity/entity-page";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Content } from "@/components/content";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { loadEntity } from "@/lib/data";
 import { semesterOf, toNumber } from "@/lib/format";
@@ -25,43 +25,42 @@ export default async function Page() {
 
   return (
     <EntityPage entity="evaluation" rows={rows} lookups={lookups} me={me}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Ringkasan Semester</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
+      <Content title="Ringkasan Semester" description="Dihitung otomatis dari evaluasi per sales per semester">
+        <div className="overflow-hidden rounded-md border">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Semester</TableHead>
-                <TableHead>Sales</TableHead>
-                <TableHead>Isu</TableHead>
-                <TableHead>Rata-rata Skor</TableHead>
-                <TableHead>Topik</TableHead>
+            <TableHeader className="bg-muted/50">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Semester</TableHead>
+                <TableHead className="text-muted-foreground">Sales</TableHead>
+                <TableHead className="text-right text-muted-foreground">Isu</TableHead>
+                <TableHead className="text-right text-muted-foreground">Rata-rata Skor</TableHead>
+                <TableHead className="text-muted-foreground">Topik</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {summary.length ? (
                 summary.map((s) => (
                   <TableRow key={`${s.sem}|${s.sales}`}>
-                    <TableCell>{s.sem}</TableCell>
+                    <TableCell className="font-medium">{s.sem}</TableCell>
                     <TableCell>{s.sales}</TableCell>
-                    <TableCell className="tabular-nums">{s.count}</TableCell>
-                    <TableCell className="font-bold tabular-nums">{(s.total / s.count).toFixed(1)}</TableCell>
-                    <TableCell className="max-w-md truncate">{s.topics.join(", ")}</TableCell>
+                    <TableCell className="text-right tabular-nums">{s.count}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">{(s.total / s.count).toFixed(1)}</TableCell>
+                    <TableCell className="max-w-md truncate" title={s.topics.join(", ")}>
+                      {s.topics.join(", ")}
+                    </TableCell>
                   </TableRow>
                 ))
               ) : (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
                     Belum ada data
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
+      </Content>
     </EntityPage>
   );
 }

@@ -1,5 +1,7 @@
 import { requireMenu } from "@/lib/auth";
 import { allMenusOrdered } from "@/lib/menus";
+import { normalizeAccent } from "@/lib/accent-options";
+import { normalizeFont } from "@/lib/font-options";
 import { SettingsView } from "./settings-view";
 
 export default async function SettingsPage() {
@@ -22,7 +24,8 @@ export default async function SettingsPage() {
     <SettingsView
       role={profile.role}
       tenantCode={tenant.code}
-      settings={settings}
+      // nilai lama ("Emerald", "Inter") dipetakan ke nama tema/font baru
+      settings={{ ...settings, accent: normalizeAccent(settings.accent), font: normalizeFont(settings.font) }}
       menus={allMenusOrdered(menuConfig, customMenus).map((m) => ({
         id: m.id,
         label: m.label,

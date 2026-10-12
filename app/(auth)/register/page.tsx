@@ -6,10 +6,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import type { z } from "zod";
-import { CircleCheck } from "lucide-react";
+import { AtSign, CircleCheck, Loader2, LockKeyhole, Mail, UserRound } from "lucide-react";
 import { register as registerAction } from "@/app/actions/auth";
 import { registerSchema } from "@/lib/schemas/auth";
-import { TextField } from "@/components/form/text-field";
+import { AuthField } from "@/components/auth/auth-field";
+import { AuthHeading } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 
@@ -31,39 +32,48 @@ export default function RegisterPage() {
 
   if (done) {
     return (
-      <div className="space-y-4">
-        <CircleCheck className="size-10 text-brand-text" />
-        <h2 className="text-xl font-bold">Registrasi berhasil</h2>
-        <p className="text-sm text-muted-foreground">
-          Akun Anda <b>belum aktif</b>. Moderator akan memverifikasi, menentukan perusahaan (tenant) dan role Anda.
-          Setelah diaktifkan, Anda bisa login.
-        </p>
-        <Button asChild variant="secondary">
-          <Link href="/login">Kembali ke Login</Link>
+      <div className="flex flex-col items-center gap-4 text-center">
+        <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <CircleCheck className="size-6" />
+        </span>
+        <div className="space-y-1.5">
+          <h1 className="text-2xl font-semibold tracking-tight">Registrasi berhasil</h1>
+          <p className="text-sm text-muted-foreground">
+            Akun Anda <span className="font-medium text-foreground">belum aktif</span>. Moderator akan memverifikasi,
+            menentukan perusahaan dan role Anda. Setelah diaktifkan, Anda bisa masuk.
+          </p>
+        </div>
+        <Button asChild variant="outline" className="w-full">
+          <Link href="/login">Kembali ke halaman masuk</Link>
         </Button>
       </div>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6" noValidate>
-      <div>
-        <h2 className="text-xl font-bold">Registrasi</h2>
-        <p className="text-sm text-muted-foreground">Akun akan aktif setelah disetujui moderator.</p>
-      </div>
-      <FieldGroup className="gap-4">
-        <TextField form={form} name="name" label="Nama Lengkap" autoComplete="name" />
-        <TextField form={form} name="username" label="Username" placeholder="mis. budi.santoso" autoComplete="username" />
-        <TextField form={form} name="email" label="Email" type="email" autoComplete="email" />
-        <TextField form={form} name="password" label="Password" type="password" autoComplete="new-password" />
-        <TextField form={form} name="confirm" label="Ulangi Password" type="password" autoComplete="new-password" />
-      </FieldGroup>
-      <Button type="submit" size="lg" className="w-full font-bold" disabled={pending}>
-        {pending ? "Mendaftar…" : "Daftar"}
-      </Button>
-      <Link href="/login" className="block text-sm text-brand-text hover:underline">
-        Sudah punya akun? Login
-      </Link>
-    </form>
+    <>
+      <AuthHeading title="Daftar Akun" description="Akun aktif setelah disetujui moderator." />
+      <form onSubmit={onSubmit} className="space-y-6" noValidate>
+        <FieldGroup className="gap-4">
+          <AuthField form={form} name="name" label="Nama Lengkap" icon={UserRound} autoComplete="name" />
+          <AuthField form={form} name="username" label="Username" icon={AtSign} placeholder="mis. budi.santoso" autoComplete="username" />
+          <AuthField form={form} name="email" label="Email" icon={Mail} type="email" autoComplete="email" placeholder="nama@perusahaan.com" />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AuthField form={form} name="password" label="Password" icon={LockKeyhole} type="password" autoComplete="new-password" />
+            <AuthField form={form} name="confirm" label="Ulangi Password" icon={LockKeyhole} type="password" autoComplete="new-password" />
+          </div>
+        </FieldGroup>
+        <Button type="submit" className="h-11 w-full" disabled={pending}>
+          {pending && <Loader2 className="animate-spin" />}
+          {pending ? "Mendaftar…" : "Daftar"}
+        </Button>
+        <p className="text-center text-sm text-muted-foreground">
+          Sudah punya akun?{" "}
+          <Link href="/login" className="rounded-sm font-medium text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+            Masuk
+          </Link>
+        </p>
+      </form>
+    </>
   );
 }

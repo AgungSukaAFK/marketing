@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
+import { Building2 } from "lucide-react";
+import { Content } from "@/components/content";
+import { Button } from "@/components/ui/button";
 import { loadEntity } from "@/lib/data";
 import { SalesDailyView } from "./sales-daily-view";
 
@@ -8,16 +10,20 @@ export default async function Page() {
   if (!lookups.customers.length) {
     const canCustomer = ctx.menus.some((m) => m.id === "customer");
     return (
-      <Card>
-        <CardContent className="py-6 text-center">
-          Isi Customer DB dulu.{" "}
+      <Content title="Sales Daily Activity">
+        <div className="flex flex-col items-center gap-3 py-10 text-center">
+          <Building2 className="size-8 text-muted-foreground" />
+          <div className="space-y-1">
+            <p className="font-medium">Belum ada data customer</p>
+            <p className="text-sm text-muted-foreground">Isi Customer DB dulu sebelum mencatat aktivitas.</p>
+          </div>
           {canCustomer && (
-            <Link href="/customers" className="text-brand-text underline">
-              Buka Customer DB
-            </Link>
+            <Button asChild size="sm">
+              <Link href="/customers">Buka Customer DB</Link>
+            </Button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Content>
     );
   }
   return (

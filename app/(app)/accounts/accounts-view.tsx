@@ -4,10 +4,12 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
+import { History, KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { z } from "zod";
 import { createAccount, deleteAccount, resetAccountPassword, updateAccount } from "@/app/actions/accounts";
+import { Content } from "@/components/content";
+import { PasswordInput } from "@/components/form/password-input";
 import { StatusBadge } from "@/components/entity/status-badge";
 import { RoleBadge } from "@/components/role-badge";
 import { TextField } from "@/components/form/text-field";
@@ -22,11 +24,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -60,25 +60,24 @@ export function AccountsView({ users, history, me }: { users: AccountRow[]; hist
   const byId = new Map(users.map((u) => [u.id, u]));
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-          <div>
-            <CardTitle>Akun Terdaftar ({users.length})</CardTitle>
-            <CardDescription>
-              {me.role === "master" ? "Master bisa kelola semua role." : "Admin hanya bisa kelola akun Sales."}
-            </CardDescription>
-          </div>
-          <Button className="font-bold" onClick={() => setEditing("new")}>
+    <>
+      <Content
+        title={`Akun Terdaftar (${users.length})`}
+        description={me.role === "master" ? "Master bisa kelola semua role." : "Admin hanya bisa kelola akun Sales."}
+        cardAction={
+          <Button size="sm" onClick={() => setEditing("new")}>
             <Plus /> Tambah Akun
           </Button>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
+        }
+      >
+        <div className="overflow-hidden rounded-md border">
           <Table>
-            <TableHeader>
-              <TableRow>
+            <TableHeader className="bg-muted/50">
+              <TableRow className="hover:bg-transparent">
                 {["Nama", "Username", "Email", "Role", "Status", "Online", "Last Login", "Dibuat", "Aksi"].map((h) => (
-                  <TableHead key={h}>{h}</TableHead>
+                  <TableHead key={h} className="text-muted-foreground">
+                    {h}
+                  </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -87,9 +86,12 @@ export function AccountsView({ users, history, me }: { users: AccountRow[]; hist
                 const manageable = canManage(me.role, u.role);
                 return (
                   <TableRow key={u.id}>
-                    <TableCell className="whitespace-nowrap">{u.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {u.name}
+                      {u.id === me.id && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(Anda)</span>}
+                    </TableCell>
                     <TableCell className="font-mono text-xs">{u.username}</TableCell>
-                    <TableCell className="text-xs">{u.email}</TableCell>
+                    <TableCell className="text-muted-foreground">{u.email}</TableCell>
                     <TableCell>
                       <RoleBadge role={u.role} />
                     </TableCell>
@@ -98,21 +100,21 @@ export function AccountsView({ users, history, me }: { users: AccountRow[]; hist
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5 text-xs">
-                        <span className={cn("size-2 rounded-full", online.has(u.id) ? "bg-brand" : "bg-muted-foreground/40")} />
+                        <span className={cn("size-2 rounded-full", online.has(u.id) ? "bg-green-500" : "bg-muted-foreground/40")} />
                         {online.has(u.id) ? "Online" : "Offline"}
                       </span>
                     </TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(u.last_seen_at)}</TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(u.created_at)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{fmtDateTime(u.last_seen_at)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{fmtDateTime(u.created_at)}</TableCell>
                     <TableCell>
                       {manageable && (
-                        <div className="flex gap-1">
-                          <Button size="icon-sm" variant="secondary" title="Edit" aria-label="Edit" onClick={() => setEditing(u)}>
+                        <div className="flex items-center gap-1">
+                          <Button size="icon-sm" variant="ghost" title="Edit" aria-label="Edit" onClick={() => setEditing(u)}>
                             <Pencil />
                           </Button>
                           <Button
                             size="icon-sm"
-                            variant="secondary"
+                            variant="ghost"
                             title="Reset password"
                             aria-label="Reset password"
                             onClick={() => setResetting(u)}
@@ -120,7 +122,14 @@ export function AccountsView({ users, history, me }: { users: AccountRow[]; hist
                             <KeyRound />
                           </Button>
                           {u.id !== me.id && (
-                            <Button size="icon-sm" variant="destructive" title="Hapus" aria-label="Hapus" onClick={() => setDeleting(u)}>
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              title="Hapus"
+                              aria-label="Hapus"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => setDeleting(u)}
+                            >
                               <Trash2 />
                             </Button>
                           )}
@@ -132,27 +141,24 @@ export function AccountsView({ users, history, me }: { users: AccountRow[]; hist
               })}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
+      </Content>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Riwayat Login (300 terbaru)</CardTitle>
-        </CardHeader>
-        <CardContent className="max-h-96 overflow-auto">
+      <Content title="Riwayat Login" description="300 aktivitas login/logout terbaru">
+        <div className="max-h-96 overflow-auto rounded-md border">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Waktu</TableHead>
-                <TableHead>Username</TableHead>
-                <TableHead>Nama</TableHead>
-                <TableHead>Aksi</TableHead>
+            <TableHeader className="sticky top-0 z-10 bg-muted">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Waktu</TableHead>
+                <TableHead className="text-muted-foreground">Username</TableHead>
+                <TableHead className="text-muted-foreground">Nama</TableHead>
+                <TableHead className="text-muted-foreground">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {history.map((h) => (
                 <TableRow key={h.id}>
-                  <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(h.created_at)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground tabular-nums">{fmtDateTime(h.created_at)}</TableCell>
                   <TableCell className="font-mono text-xs">{byId.get(h.user_id)?.username ?? "-"}</TableCell>
                   <TableCell>{byId.get(h.user_id)?.name ?? "-"}</TableCell>
                   <TableCell>
@@ -161,16 +167,17 @@ export function AccountsView({ users, history, me }: { users: AccountRow[]; hist
                 </TableRow>
               ))}
               {!history.length && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={4} className="h-24 text-center text-sm text-muted-foreground">
+                    <History className="mx-auto mb-1 size-5" />
                     Belum ada riwayat
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
+      </Content>
 
       <AccountDialog
         target={editing}
@@ -193,7 +200,7 @@ export function AccountsView({ users, history, me }: { users: AccountRow[]; hist
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={() => {
                 const u = deleting;
                 if (!u) return;
@@ -210,7 +217,7 @@ export function AccountsView({ users, history, me }: { users: AccountRow[]; hist
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
 
@@ -261,6 +268,9 @@ function AccountDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isNew ? "Tambah Akun" : "Edit Akun"}</DialogTitle>
+          <DialogDescription>
+            {isNew ? "Akun langsung aktif dan bisa dipakai login." : "Ubah data, role, atau status akun."}
+          </DialogDescription>
         </DialogHeader>
         {isNew ? (
           <CreateForm actorRole={actorRole} onDone={() => (onClose(), onSaved())} />
@@ -301,8 +311,8 @@ function CreateForm({ actorRole, onDone }: { actorRole: TenantRole; onDone: () =
         </Field>
       </FieldGroup>
       <DialogFooter>
-        <Button type="submit" disabled={pending} className="font-bold">
-          Simpan
+        <Button type="submit" disabled={pending}>
+          {pending ? "Menyimpan…" : "Simpan"}
         </Button>
       </DialogFooter>
     </form>
@@ -361,8 +371,8 @@ function EditForm({
         </Field>
       </FieldGroup>
       <DialogFooter>
-        <Button type="submit" disabled={pending} className="font-bold">
-          Simpan
+        <Button type="submit" disabled={pending}>
+          {pending ? "Menyimpan…" : "Simpan"}
         </Button>
       </DialogFooter>
     </form>
@@ -384,16 +394,19 @@ function ResetPasswordDialog({ target, onClose }: { target: AccountRow | null; o
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Reset password — {target?.username}</DialogTitle>
+          <DialogTitle>Reset Password</DialogTitle>
+          <DialogDescription>
+            Password baru untuk <span className="font-medium text-foreground">{target?.username}</span>.
+          </DialogDescription>
         </DialogHeader>
         <Field>
-          <FieldLabel htmlFor="newpw">Password baru (min. 8 karakter)</FieldLabel>
-          <Input id="newpw" type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" />
+          <FieldLabel htmlFor="newpw">Password baru</FieldLabel>
+          <PasswordInput id="newpw" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" />
+          <FieldDescription>Minimal 8 karakter.</FieldDescription>
         </Field>
         <DialogFooter>
           <Button
             disabled={pending || pw.length < 8}
-            className="font-bold"
             onClick={() =>
               start(async () => {
                 if (!target) return;

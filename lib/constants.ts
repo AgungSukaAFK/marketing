@@ -8,7 +8,24 @@ export const ROLE_LABEL: Record<Role, string> = {
   sales: "Sales",
 };
 
+/** Nama aplikasi bawaan. Tiap perusahaan bisa menggantinya di App Customizer. */
+export const DEFAULT_APP_NAME = "Lourdes Marketing";
+export const APP_TAGLINE = "Industrial & Mining CRM";
+
 export const TENANT_ROLES: TenantRole[] = ["sales", "admin", "master"];
+
+/** Kelompok fitur di sidebar, dalam urutan tampil. Menu kustom masuk ke "custom". */
+export const MENU_GROUPS = [
+  { id: "overview", label: "Ringkasan" },
+  { id: "activity", label: "Aktivitas Harian" },
+  { id: "sales", label: "Penjualan" },
+  { id: "forecast", label: "Forecast" },
+  { id: "team", label: "Pengembangan Tim" },
+  { id: "custom", label: "Halaman Kustom" },
+  { id: "admin", label: "Administrasi" },
+] as const;
+
+export type MenuGroupId = (typeof MENU_GROUPS)[number]["id"];
 
 /** Menu bawaan. `id` sama dengan prototipe (dipakai di menu_config & access_control). */
 export type BaseMenu = {
@@ -16,25 +33,26 @@ export type BaseMenu = {
   label: string;
   icon: string;
   href: string;
+  group: MenuGroupId;
   roles?: TenantRole[];
 };
 
 export const BASE_MENUS: BaseMenu[] = [
-  { id: "dashboard", label: "Dashboard", icon: "layout-dashboard", href: "/dashboard" },
-  { id: "customer", label: "Customer DB", icon: "building-2", href: "/customers" },
-  { id: "sales_daily", label: "Sales Daily Activity", icon: "clipboard-list", href: "/sales-daily" },
-  { id: "admin_daily", label: "Admin Daily Activity", icon: "file-cog", href: "/admin-daily" },
-  { id: "pipeline", label: "Pipeline Engine", icon: "kanban", href: "/pipeline" },
-  { id: "forecast", label: "Sales Forecast", icon: "trending-up", href: "/forecast" },
-  { id: "quotation", label: "Monitoring Quotation", icon: "file-text", href: "/quotation" },
-  { id: "trend", label: "Forecast Trend Analysis", icon: "bar-chart-3", href: "/forecast-trend" },
-  { id: "actual", label: "Sales Actual vs Forecast", icon: "scale", href: "/actual" },
-  { id: "doc", label: "Documentation", icon: "folder-archive", href: "/documentation" },
-  { id: "refreshment", label: "Refreshment & Assessment", icon: "graduation-cap", href: "/refreshment" },
-  { id: "evaluation", label: "Evaluasi Bulanan Sales", icon: "star", href: "/evaluation" },
-  { id: "analytics", label: "Analytics", icon: "pie-chart", href: "/analytics" },
-  { id: "akun", label: "Akun", icon: "users", href: "/accounts", roles: ["master", "admin"] },
-  { id: "settings", label: "App Customizer / Settings", icon: "settings", href: "/settings", roles: ["master", "admin"] },
+  { id: "dashboard", label: "Dashboard", icon: "layout-dashboard", href: "/dashboard", group: "overview" },
+  { id: "customer", label: "Customer DB", icon: "building-2", href: "/customers", group: "sales" },
+  { id: "sales_daily", label: "Sales Daily Activity", icon: "clipboard-list", href: "/sales-daily", group: "activity" },
+  { id: "admin_daily", label: "Admin Daily Activity", icon: "file-cog", href: "/admin-daily", group: "activity" },
+  { id: "pipeline", label: "Pipeline Engine", icon: "kanban", href: "/pipeline", group: "sales" },
+  { id: "forecast", label: "Sales Forecast", icon: "trending-up", href: "/forecast", group: "forecast" },
+  { id: "quotation", label: "Monitoring Quotation", icon: "file-text", href: "/quotation", group: "sales" },
+  { id: "trend", label: "Forecast Trend Analysis", icon: "bar-chart-3", href: "/forecast-trend", group: "forecast" },
+  { id: "actual", label: "Sales Actual vs Forecast", icon: "scale", href: "/actual", group: "forecast" },
+  { id: "doc", label: "Documentation", icon: "folder-archive", href: "/documentation", group: "team" },
+  { id: "refreshment", label: "Refreshment & Assessment", icon: "graduation-cap", href: "/refreshment", group: "team" },
+  { id: "evaluation", label: "Evaluasi Bulanan Sales", icon: "star", href: "/evaluation", group: "team" },
+  { id: "analytics", label: "Analytics", icon: "pie-chart", href: "/analytics", group: "overview" },
+  { id: "akun", label: "Akun", icon: "users", href: "/accounts", group: "admin", roles: ["master", "admin"] },
+  { id: "settings", label: "App Customizer / Settings", icon: "settings", href: "/settings", group: "admin", roles: ["master", "admin"] },
 ];
 
 export const MENU_ICONS = [
@@ -43,24 +61,6 @@ export const MENU_ICONS = [
   "users", "settings", "shield", "briefcase", "database", "link", "globe", "zap", "book-open",
   "notebook", "file-check", "contact",
 ] as const;
-
-/** [warna utama, warna terang (teks di dark), warna gelap (teks di light)] */
-export const ACCENTS: Record<string, [string, string, string]> = {
-  Emerald: ["#10b981", "#34d399", "#047857"],
-  Cyan: ["#06b6d4", "#22d3ee", "#0e7490"],
-  Indigo: ["#6366f1", "#818cf8", "#4338ca"],
-  Amber: ["#f59e0b", "#fcd34d", "#b45309"],
-  Rose: ["#f43f5e", "#fb7185", "#be123c"],
-};
-
-/** Nama font → CSS variable dari next/font (lihat app/layout.tsx) */
-export const FONTS: Record<string, string> = {
-  Inter: "var(--font-inter)",
-  "JetBrains Mono": "var(--font-jetbrains)",
-  "Space Grotesk": "var(--font-space-grotesk)",
-  Manrope: "var(--font-manrope)",
-  Outfit: "var(--font-outfit)",
-};
 
 export const DENSITIES = ["Nyaman", "Kompak"] as const;
 
@@ -83,10 +83,10 @@ export const PIPELINE_STAGES = [
 ] as const;
 
 export const OPTIONS = {
-  salesDailyType: ["Visit", "Call", "Meeting", "Survey", "Delivery"],
+  salesDailyType: ["Visit", "Call", "Meeting", "Survey", "Delivery", "Entertaint", "Chat WhatsApp"],
   salesDailyStatus: ["Completed", "Pending", "In Progress"],
-  adminDailyType: ["PO Input", "Buat Quotation", "Input Quotation Accurate", "Kontrak", "Buat Data", "Lainnya"],
-  adminDailyStatus: ["Draft", "Pending", "Proses", "Selesai", "Ditolak", "Postponed"],
+  adminDailyType: ["PO Input", "Buat Quotation", "Input Quotation Accurate", "Kontrak", "Buat Data", "Buat Budget", "Buat MR", "Meeting", "Lainnya"],
+  adminDailyStatus: ["Draft", "Pending", "Proses", "Selesai", "Ditolak"],
   forecastStatus: ["On Track", "Achieved", "Delayed", "At Risk"],
   poStatus: ["Pending", "Win", "Loss", "Cancel"],
   refreshmentJenis: ["Weekly Brainstorming", "Monthly Test"],

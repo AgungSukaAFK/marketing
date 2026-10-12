@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2, Pencil, Plus, Trash2, UserCheck } from "lucide-react";
+import { Building2, Pencil, Plus, Search, Trash2, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import type { z } from "zod";
 import { createUserByModerator, deleteUser, saveTenant, saveUserAssignment } from "@/app/actions/moderator";
+import { Content } from "@/components/content";
 import { RoleBadge } from "@/components/role-badge";
 import { StatusBadge } from "@/components/entity/status-badge";
 import { TextField } from "@/components/form/text-field";
@@ -21,8 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -69,10 +69,15 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
     });
 
   return (
-    <Tabs defaultValue="users" className="space-y-4">
+    <Tabs defaultValue="users" className="col-span-12 gap-4">
       <TabsList>
         <TabsTrigger value="users">
-          <UserCheck /> Akun {pendingCount > 0 && <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-[10px] text-black">{pendingCount}</span>}
+          <UserCheck /> Akun
+          {pendingCount > 0 && (
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground tabular-nums">
+              {pendingCount}
+            </span>
+          )}
         </TabsTrigger>
         <TabsTrigger value="tenants">
           <Building2 /> Company / Tenant
@@ -80,60 +85,77 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
       </TabsList>
 
       <TabsContent value="users">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Akun Pengguna</CardTitle>
-              <CardDescription>
-                Akun hasil registrasi menunggu di sini. Aktifkan dengan menentukan company &amp; role.
-              </CardDescription>
-            </div>
-            <Button className="font-bold" onClick={() => setCreating(true)}>
+        <Content
+          title="Akun Pengguna"
+          description="Akun hasil registrasi menunggu di sini. Aktifkan dengan menentukan company & role."
+          cardAction={
+            <Button size="sm" onClick={() => setCreating(true)}>
               <Plus /> Akun Baru
             </Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)}>
                 <TabsList>
-                  <TabsTrigger value="pending">Menunggu ({pendingCount})</TabsTrigger>
+                  <TabsTrigger value="pending">
+                    Menunggu <span className="text-muted-foreground tabular-nums">({pendingCount})</span>
+                  </TabsTrigger>
                   <TabsTrigger value="active">Aktif</TabsTrigger>
                   <TabsTrigger value="all">Semua</TabsTrigger>
                 </TabsList>
               </Tabs>
-              <Input placeholder="Cari nama / email / company…" value={q} onChange={(e) => setQ(e.target.value)} className="ml-auto w-64" />
+              <div className="relative sm:ml-auto sm:w-72">
+                <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Cari nama / email / company…"
+                  aria-label="Cari akun"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
             </div>
-            <div className="overflow-x-auto rounded-xl border">
+            <div className="overflow-hidden rounded-md border">
               <Table>
-                <TableHeader>
-                  <TableRow>
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent">
                     {["Nama", "Username", "Email", "Company", "Role", "Status", "Daftar", "Last Login", "Aksi"].map((h) => (
-                      <TableHead key={h}>{h}</TableHead>
+                      <TableHead key={h} className="text-muted-foreground">
+                        {h}
+                      </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {shown.map((u) => (
                     <TableRow key={u.id}>
-                      <TableCell className="whitespace-nowrap">{u.name}</TableCell>
+                      <TableCell className="font-medium">{u.name}</TableCell>
                       <TableCell className="font-mono text-xs">{u.username}</TableCell>
-                      <TableCell className="text-xs">{u.email}</TableCell>
-                      <TableCell className="whitespace-nowrap">{u.tenant_id ? tenantName.get(u.tenant_id) : "-"}</TableCell>
+                      <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                      <TableCell>{u.tenant_id ? tenantName.get(u.tenant_id) : <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell>
                         <RoleBadge role={u.role} />
                       </TableCell>
                       <TableCell>
                         <StatusBadge value={u.active ? "Aktif" : "Menunggu"} />
                       </TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(u.created_at)}</TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(u.last_seen_at)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{fmtDateTime(u.created_at)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{fmtDateTime(u.last_seen_at)}</TableCell>
                       <TableCell>
-                        <div className="flex gap-1">
-                          <Button size="sm" variant={u.active ? "secondary" : "default"} className="font-bold" onClick={() => setAssigning(u)}>
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant={u.active ? "outline" : "default"} onClick={() => setAssigning(u)}>
                             {u.active ? <Pencil /> : <UserCheck />} {u.active ? "Edit" : "Aktifkan"}
                           </Button>
                           {u.id !== meId && (
-                            <Button size="icon-sm" variant="destructive" aria-label="Hapus" onClick={() => setDeleting(u)}>
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              title="Hapus"
+                              aria-label="Hapus"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => setDeleting(u)}
+                            >
                               <Trash2 />
                             </Button>
                           )}
@@ -142,8 +164,8 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
                     </TableRow>
                   ))}
                   {!shown.length && (
-                    <TableRow>
-                      <TableCell colSpan={9} className="h-20 text-center text-muted-foreground">
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={9} className="h-24 text-center text-sm text-muted-foreground">
                         {filter === "pending" ? "Tidak ada akun yang menunggu aktivasi" : "Tidak ada data"}
                       </TableCell>
                     </TableRow>
@@ -151,50 +173,58 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </Content>
       </TabsContent>
 
       <TabsContent value="tenants">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Company / Tenant ({tenants.length})</CardTitle>
-              <CardDescription>Data tiap company terisolasi satu sama lain (RLS per tenant).</CardDescription>
-            </div>
-            <Button className="font-bold" onClick={() => setTenantEdit("new")}>
+        <Content
+          title={`Company / Tenant (${tenants.length})`}
+          description="Data tiap company terisolasi satu sama lain (RLS per tenant)."
+          cardAction={
+            <Button size="sm" onClick={() => setTenantEdit("new")}>
               <Plus /> Company Baru
             </Button>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
+          }
+        >
+          <div className="overflow-hidden rounded-md border">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nama</TableHead>
-                  <TableHead>Kode</TableHead>
-                  <TableHead>Anggota Aktif</TableHead>
-                  <TableHead>Dibuat</TableHead>
-                  <TableHead>Aksi</TableHead>
+              <TableHeader className="bg-muted/50">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-muted-foreground">Nama</TableHead>
+                  <TableHead className="text-muted-foreground">Kode</TableHead>
+                  <TableHead className="text-right text-muted-foreground">Anggota Aktif</TableHead>
+                  <TableHead className="text-muted-foreground">Dibuat</TableHead>
+                  <TableHead className="text-muted-foreground">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {tenants.map((t) => (
                   <TableRow key={t.id}>
-                    <TableCell>{t.name}</TableCell>
+                    <TableCell className="font-medium">{t.name}</TableCell>
                     <TableCell className="font-mono text-xs">{t.code}</TableCell>
-                    <TableCell className="tabular-nums">{users.filter((u) => u.tenant_id === t.id && u.active).length}</TableCell>
-                    <TableCell className="text-xs">{fmtDateTime(t.created_at)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {users.filter((u) => u.tenant_id === t.id && u.active).length}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{fmtDateTime(t.created_at)}</TableCell>
                     <TableCell>
-                      <Button size="icon-sm" variant="secondary" aria-label="Edit" onClick={() => setTenantEdit(t)}>
+                      <Button size="icon-sm" variant="ghost" title="Edit" aria-label="Edit" onClick={() => setTenantEdit(t)}>
                         <Pencil />
                       </Button>
                     </TableCell>
                   </TableRow>
                 ))}
+                {!tenants.length && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+                      Belum ada company
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+          </div>
+        </Content>
       </TabsContent>
 
       <AssignDialog user={assigning} tenants={tenants} isSelf={assigning?.id === meId} onClose={() => setAssigning(null)} onSaved={() => router.refresh()} />
@@ -210,7 +240,7 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={() => {
                 const u = deleting;
                 if (!u) return;
@@ -336,7 +366,7 @@ function AssignDialog({
           </FieldGroup>
         </form>
         <DialogFooter>
-          <Button type="submit" form="assign-form" disabled={pending} className="font-bold">
+          <Button type="submit" form="assign-form" disabled={pending}>
             Simpan
           </Button>
         </DialogFooter>
@@ -375,7 +405,7 @@ function TenantDialog({ tenant, onClose, onSaved }: { tenant: Tenant | "new" | n
           </FieldGroup>
         </form>
         <DialogFooter>
-          <Button type="submit" form="tenant-form" disabled={pending} className="font-bold">
+          <Button type="submit" form="tenant-form" disabled={pending}>
             Simpan
           </Button>
         </DialogFooter>
@@ -471,7 +501,7 @@ function CreateUserDialog({
           </FieldGroup>
         </form>
         <DialogFooter>
-          <Button type="submit" form="create-user-form" disabled={pending} className="font-bold">
+          <Button type="submit" form="create-user-form" disabled={pending}>
             Buat Akun
           </Button>
         </DialogFooter>

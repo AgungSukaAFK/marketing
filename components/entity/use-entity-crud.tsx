@@ -2,10 +2,16 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileSpreadsheet, FileText, FileType, Plus, Upload } from "lucide-react";
+import { ChevronDown, Download, FileSpreadsheet, FileText, FileType, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { deleteEntity, importEntity } from "@/app/actions/entity";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -97,11 +103,8 @@ export function useEntityCrud({
   };
 
   const toolbar = (
-    <>
-      <Button onClick={openCreate} className="font-bold">
-        <Plus /> Input/Tambah
-      </Button>
-      <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={busy}>
+    <div className="flex flex-wrap items-center gap-2">
+      <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={busy}>
         <Upload /> Import
       </Button>
       <input
@@ -111,16 +114,28 @@ export function useEntityCrud({
         className="hidden"
         onChange={(e) => onImport(e.target.files?.[0])}
       />
-      <Button variant="secondary" onClick={() => doExport("excel")}>
-        <FileSpreadsheet /> Excel
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Download /> Export <ChevronDown className="text-muted-foreground" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => doExport("excel")}>
+            <FileSpreadsheet /> Excel (.xlsx)
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => doExport("pdf")}>
+            <FileText /> PDF
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => doExport("word")}>
+            <FileType /> Word (.docx)
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Button size="sm" onClick={openCreate}>
+        <Plus /> Tambah
       </Button>
-      <Button variant="secondary" onClick={() => doExport("pdf")}>
-        <FileText /> PDF
-      </Button>
-      <Button variant="secondary" onClick={() => doExport("word")}>
-        <FileType /> Word
-      </Button>
-    </>
+    </div>
   );
 
   const dialogs = (
@@ -143,7 +158,7 @@ export function useEntityCrud({
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={() => {
                 const r = deleting;
                 if (!r) return;

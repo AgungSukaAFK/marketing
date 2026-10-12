@@ -35,7 +35,8 @@ export async function exportPDF(title: string, headers: string[], body: string[]
     body,
     startY: 23,
     styles: { fontSize: 7 },
-    headStyles: { fillColor: [16, 185, 129], textColor: [0, 0, 0] },
+    headStyles: { fillColor: [24, 24, 27], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [244, 244, 245] },
   });
   doc.save(`${name}_${stamp()}.pdf`);
 }
@@ -44,8 +45,10 @@ export async function exportWord(title: string, headers: string[], body: string[
   const d = await import("docx");
   const cell = (text: string, bold = false) =>
     new d.TableCell({
-      children: [new d.Paragraph({ children: [new d.TextRun({ text, bold, size: 16 })] })],
-      shading: bold ? { fill: "10B981", type: d.ShadingType.CLEAR, color: "auto" } : undefined,
+      children: [
+        new d.Paragraph({ children: [new d.TextRun({ text, bold, size: 16, color: bold ? "FFFFFF" : undefined })] }),
+      ],
+      shading: bold ? { fill: "18181B", type: d.ShadingType.CLEAR, color: "auto" } : undefined,
     });
   const table = new d.Table({
     width: { size: 100, type: d.WidthType.PERCENTAGE },

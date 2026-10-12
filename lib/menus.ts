@@ -1,4 +1,4 @@
-import { BASE_MENUS, type TenantRole } from "@/lib/constants";
+import { BASE_MENUS, type MenuGroupId, type TenantRole } from "@/lib/constants";
 
 export type MenuConfig = {
   labels: Record<string, string>;
@@ -23,6 +23,7 @@ export type ResolvedMenu = {
   defaultLabel: string;
   icon: string;
   href: string;
+  group: MenuGroupId;
   custom: boolean;
   roles?: TenantRole[];
 };
@@ -36,6 +37,7 @@ export function allMenusOrdered(cfg: MenuConfig, custom: CustomMenuRow[]): Resol
       defaultLabel: m.label,
       icon: cfg.icons[m.id] || m.icon,
       href: m.href,
+      group: m.group,
       custom: false,
       roles: m.roles,
     })),
@@ -45,6 +47,7 @@ export function allMenusOrdered(cfg: MenuConfig, custom: CustomMenuRow[]): Resol
       defaultLabel: c.label,
       icon: cfg.icons[c.menu_key] || c.icon || "file-text",
       href: `/custom/${c.menu_key}`,
+      group: "custom" as const,
       custom: true,
     })),
   ];

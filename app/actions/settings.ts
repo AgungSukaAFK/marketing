@@ -6,7 +6,9 @@ import { getAppContext } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dbError, fail, ok, type ActionResult } from "@/lib/action-result";
 import { run } from "@/lib/safe-action";
-import { ACCENTS, BASE_MENUS, FONTS, MENU_ICONS, STORAGE_BUCKET } from "@/lib/constants";
+import { BASE_MENUS, DEFAULT_APP_NAME, MENU_ICONS, STORAGE_BUCKET } from "@/lib/constants";
+import { DEFAULT_ACCENT, isAccentTheme } from "@/lib/accent-options";
+import { DEFAULT_FONT_FAMILY, isFontFamily } from "@/lib/font-options";
 import { ENTITIES, filePathFields, type EntityKey } from "@/lib/entities";
 
 async function managerCtx() {
@@ -25,8 +27,8 @@ const refreshAll = () => revalidatePath("/", "layout");
 
 const appSchema = z.object({
   app_name: z.string().trim().min(1, "Nama aplikasi wajib").max(60),
-  accent: z.string().refine((v) => v in ACCENTS, "Aksen tidak valid"),
-  font: z.string().refine((v) => v in FONTS, "Font tidak valid"),
+  accent: z.string().refine(isAccentTheme, "Aksen tidak valid"),
+  font: z.string().refine(isFontFamily, "Font tidak valid"),
   density: z.enum(["Nyaman", "Kompak"]),
 });
 
@@ -99,9 +101,9 @@ export async function resetMenuConfig(): Promise<ActionResult> {
       ctx.supabase
         .from("app_settings")
         .update({
-          app_name: "TITAN APEX V4",
-          accent: "Emerald",
-          font: "Inter",
+          app_name: DEFAULT_APP_NAME,
+          accent: DEFAULT_ACCENT,
+          font: DEFAULT_FONT_FAMILY,
           density: "Nyaman",
           header_cfg: { showClock: true, showBadge: true, showTheme: true, showOnline: true },
         })

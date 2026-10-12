@@ -1,10 +1,11 @@
 "use client";
 
 import type { FieldValues, Path, UseFormReturn } from "react-hook-form";
-import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { PasswordInput } from "@/components/form/password-input";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
-/** Input teks + label + error untuk react-hook-form. */
+/** Input teks + label + error untuk react-hook-form. type="password" dapat tombol lihat. */
 export function TextField<T extends FieldValues>({
   form,
   name,
@@ -12,6 +13,7 @@ export function TextField<T extends FieldValues>({
   type = "text",
   autoComplete,
   placeholder,
+  description,
 }: {
   form: UseFormReturn<T>;
   name: Path<T>;
@@ -19,19 +21,21 @@ export function TextField<T extends FieldValues>({
   type?: string;
   autoComplete?: string;
   placeholder?: string;
+  description?: string;
 }) {
   const error = form.formState.errors[name];
+  const common = {
+    id: name,
+    autoComplete,
+    placeholder,
+    "aria-invalid": !!error,
+    ...form.register(name),
+  };
   return (
     <Field data-invalid={!!error}>
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
-      <Input
-        id={name}
-        type={type}
-        autoComplete={autoComplete}
-        placeholder={placeholder}
-        aria-invalid={!!error}
-        {...form.register(name)}
-      />
+      {type === "password" ? <PasswordInput {...common} /> : <Input type={type} {...common} />}
+      {description && !error && <FieldDescription>{description}</FieldDescription>}
       <FieldError errors={[error as { message?: string } | undefined]} />
     </Field>
   );

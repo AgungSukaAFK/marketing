@@ -45,6 +45,10 @@ export type FieldDef = {
   fromCustomer?: keyof CustomerLite;
   /** sembunyikan di form (mis. dihitung DB) */
   hidden?: boolean;
+  /** tampilan input angka: format Rupiah (Rp 1.500.000) */
+  money?: boolean;
+  /** tampilan input angka: satuan di kanan, mis. "%" */
+  suffix?: string;
 };
 
 export type ColumnKind = "text" | "code" | "money" | "number" | "percent" | "badge" | "mono";
@@ -164,7 +168,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       { name: "email", label: "Email", type: "email" },
       { name: "jabatan", label: "Jabatan", type: "text" },
       { name: "site", label: "Site", type: "text" },
-      { name: "cuti", label: "Jadwal Cuti", type: "text" },
+      { name: "cuti", label: "Lokasi Cuti", type: "text" },
       { name: "ultah", label: "Ulang Tahun", type: "text" },
       { name: "tinggal", label: "Tempat Tinggal", type: "text" },
       { name: "note", label: "Note", type: "textarea" },
@@ -267,9 +271,9 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       customerField,
       { name: "sales_id", label: "Sales", type: "user", initial: (me) => me.id },
       { name: "stage", label: "Stage", type: "select", options: PIPELINE_STAGES, initial: "Market Map" },
-      { name: "value", label: "Value (Rp)", type: "number", initial: 100000000 },
+      { name: "value", label: "Value", type: "number", initial: 100000000, money: true },
       { name: "product", label: "Product", type: "text" },
-      { name: "prob", label: "Prob %", type: "number", initial: 10 },
+      { name: "prob", label: "Probabilitas", type: "number", initial: 10, suffix: "%" },
     ],
     columns: [
       custCode,
@@ -304,9 +308,9 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       { name: "deskripsi", label: "Deskripsi", type: "text" },
       { name: "periode", label: "Periode", type: "month", initial: thisMonth },
       { name: "t_qty", label: "Target Qty", type: "number" },
-      { name: "t_rp", label: "Target Rp", type: "number" },
+      { name: "t_rp", label: "Target Rp", type: "number", money: true },
       { name: "actual_qty", label: "Actual Qty", type: "number" },
-      { name: "actual_rp", label: "Actual Rp", type: "number" },
+      { name: "actual_rp", label: "Actual Rp", type: "number", money: true },
       { name: "status", label: "Status", type: "select", options: OPTIONS.forecastStatus, initial: "On Track" },
       { name: "remarks", label: "Remarks", type: "text" },
     ],
@@ -358,11 +362,11 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       { name: "tgl_quot", label: "Tgl Quot", type: "date", initial: today },
       { name: "tgl_exp", label: "Tgl Exp", type: "date" },
       { name: "part", label: "Part", type: "text" },
-      { name: "harga", label: "Harga", type: "number" },
+      { name: "harga", label: "Harga", type: "number", money: true },
       { name: "qty", label: "Qty", type: "number", initial: 1 },
-      { name: "margin_p", label: "Margin %", type: "number", initial: 15 },
+      { name: "margin_p", label: "Margin", type: "number", initial: 15, suffix: "%" },
       { name: "po_status", label: "PO Status", type: "select", options: OPTIONS.poStatus, initial: "Pending" },
-      { name: "loss", label: "Loss (Rp)", type: "number" },
+      { name: "loss", label: "Loss", type: "number", money: true },
       { name: "remarks", label: "Remarks", type: "text" },
     ],
     columns: [
@@ -534,7 +538,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       { name: "tanggal", label: "Tanggal", type: "date", initial: today },
       { name: "jenis", label: "Jenis", type: "select", options: OPTIONS.refreshmentJenis, initial: "Weekly Brainstorming" },
       { name: "topik", label: "Topik", type: "text", required: true },
-      { name: "durasi", label: "Durasi (menit)", type: "number", initial: 30 },
+      { name: "durasi", label: "Durasi", type: "number", initial: 30, suffix: "menit" },
       { name: "peserta", label: "Peserta", type: "text", initial: (me) => me.username },
       { name: "nilai", label: "Nilai", type: "text" },
       { name: "ringkasan", label: "Ringkasan", type: "textarea" },
@@ -574,7 +578,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       { name: "sales_id", label: "Sales", type: "user", initial: (me) => me.id },
       { name: "topik", label: "Topik/Isu", type: "text", required: true },
       { name: "deskripsi", label: "Deskripsi", type: "textarea" },
-      { name: "skor", label: "Skor 1-100", type: "number", initial: 75 },
+      { name: "skor", label: "Skor", type: "number", initial: 75, suffix: "/ 100" },
       { name: "foto", label: "Foto", type: "file", pathField: "foto_path", accept: "image/*" },
       { name: "tindak", label: "Tindak Lanjut", type: "text" },
       { name: "status", label: "Status", type: "select", options: OPTIONS.evaluationStatus, initial: "Open" },

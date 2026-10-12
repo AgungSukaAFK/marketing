@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, LockKeyhole, Mail } from "lucide-react";
 import { toast } from "sonner";
 import type { z } from "zod";
 import { login } from "@/app/actions/auth";
 import { loginSchema } from "@/lib/schemas/auth";
-import { TextField } from "@/components/form/text-field";
+import { AuthField } from "@/components/auth/auth-field";
+import { AuthHeading } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 
@@ -27,26 +29,31 @@ export function LoginForm({ next }: { next?: string }) {
   );
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6" noValidate>
-      <div>
-        <h2 className="text-xl font-bold">Login</h2>
-        <p className="text-sm text-muted-foreground">Masuk dengan email &amp; password.</p>
-      </div>
-      <FieldGroup>
-        <TextField form={form} name="email" label="Email" type="email" autoComplete="email" />
-        <TextField form={form} name="password" label="Password" type="password" autoComplete="current-password" />
-      </FieldGroup>
-      <Button type="submit" size="lg" className="w-full font-bold" disabled={pending}>
-        {pending ? "Memproses…" : "Masuk"}
-      </Button>
-      <div className="flex justify-between text-sm">
-        <Link href="/register" className="text-brand-text hover:underline">
-          Registrasi
-        </Link>
-        <Link href="/forgot" className="text-muted-foreground hover:underline">
-          Lupa Password?
-        </Link>
-      </div>
-    </form>
+    <>
+      <AuthHeading title="Masuk" description="Masuk dengan email & password akun Anda." />
+      <form onSubmit={onSubmit} className="space-y-6" noValidate>
+        <FieldGroup className="gap-4">
+          <AuthField form={form} name="email" label="Email" icon={Mail} type="email" autoComplete="email" placeholder="nama@perusahaan.com" />
+          <div className="space-y-2">
+            <AuthField form={form} name="password" label="Password" icon={LockKeyhole} type="password" autoComplete="current-password" />
+            <div className="flex justify-end">
+              <Link href="/forgot" className="rounded-sm text-xs text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+                Lupa password?
+              </Link>
+            </div>
+          </div>
+        </FieldGroup>
+        <Button type="submit" className="h-11 w-full" disabled={pending}>
+          {pending && <Loader2 className="animate-spin" />}
+          {pending ? "Memproses…" : "Masuk"}
+        </Button>
+        <p className="text-center text-sm text-muted-foreground">
+          Belum punya akun?{" "}
+          <Link href="/register" className="rounded-sm font-medium text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+            Daftar
+          </Link>
+        </p>
+      </form>
+    </>
   );
 }
