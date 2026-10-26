@@ -19,6 +19,10 @@ export async function updateSession(request: NextRequest) {
     );
   }
 
+  // Satu id per request: semua query dalam satu aksi user digabung jadi satu
+  // entri Activity History (lib/request-context.ts). Nilai dari klien ditimpa.
+  request.headers.set("x-activity-request", crypto.randomUUID());
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

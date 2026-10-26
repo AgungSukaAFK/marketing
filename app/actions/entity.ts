@@ -17,6 +17,7 @@ import {
   type ImportResult,
 } from "@/lib/entities";
 import { dbError, fail, ok, type ActionResult } from "@/lib/action-result";
+import { logActivity } from "@/lib/activity";
 import { PIPELINE_STAGES, STORAGE_BUCKET } from "@/lib/constants";
 import { z } from "zod";
 import { unstable_rethrow } from "next/navigation";
@@ -197,11 +198,65 @@ export async function importEntity(
           if (ownerErr) return fail(`${valid.length} data sudah masuk, tetapi owner gagal diubah: ${dbError(ownerErr)}`);
         }
       }
+      await logActivity({
+        action: "import",
+        actorId: ctx.profile.id,
+        entity: def.table,
+        recordId: null,
+        label: `${valid.length} data`,
+        meta: { inserted: valid.length, skipped: errors.length, rows: rows.length },
+      });
     }
     return ok({ inserted: valid.length, skipped: errors.length, errors: errors.slice(0, MAX_IMPORT_ERRORS) });
   } catch (e) {
     unstable_rethrow(e);
     return fail(e instanceof Error ? e.message : "Import gagal");
+  }
+}
+
+/** Link download lampiran (berlaku 60 detik). Dibuat di server supaya tercatat di Activity History. */
+export async function getDownloadUrl(key: string, path: string, name?: string): Promise<ActionResult<string>> {
+  try {
+    const { def, ctx, denied } = await guard(key);
+    if (denied) return fail("Akses menu ditolak");
+    if (typeof path !== "string" || !path.startsWith(`${ctx.profile.tenant_id}/`) || path.includes(".."))
+      return fail("Path file tidak valid");
+    const fileName = typeof name === "string" && name ? name.slice(0, 255) : undefined;
+    const { data, error } = await ctx.supabase.storage
+      .from(STORAGE_BUCKET)
+      .createSignedUrl(path, 60, { download: fileName || true });
+    if (error || !data) return fail("Gagal membuat link download");
+
+    // baris pemilik lampiran → referensi di Activity History
+    let recordId: string | null = null;
+    for (const f of filePathFields(def)) {
+      const { data: row } = await ctx.supabase.from(def.table).select("id").eq(f, path).limit(1).maybeSingle();
+      recordId = (row?.id as string | undefined) ?? null;
+      if (recordId) break;
+    }
+    for (const f of recordId ? [] : fileListFields(def)) {
+      // string JSON: array JS diformat supabase-js sebagai array Postgres, bukan jsonb
+      const { data: row } = await ctx.supabase
+        .from(def.table)
+        .select("id")
+        .contains(f, JSON.stringify([{ path }]))
+        .limit(1)
+        .maybeSingle();
+      recordId = (row?.id as string | undefined) ?? null;
+      if (recordId) break;
+    }
+    await logActivity({
+      action: "download",
+      actorId: ctx.profile.id,
+      entity: def.table,
+      recordId,
+      label: fileName ?? path.split("/").pop(),
+      meta: { file: fileName ?? path.split("/").pop(), path },
+    });
+    return ok(data.signedUrl);
+  } catch (e) {
+    unstable_rethrow(e);
+    return fail(e instanceof Error ? e.message : "Gagal membuat link download");
   }
 }
 

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getAppContext } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logActivity } from "@/lib/activity";
+import { activityHeaders } from "@/lib/request-context";
 import { todayWIB } from "@/lib/anniversary";
 import { dbError, fail, ok, type ActionResult } from "@/lib/action-result";
 import { run } from "@/lib/safe-action";
@@ -231,11 +233,21 @@ export async function backupTenant(): Promise<ActionResult<Record<string, unknow
     const out: Record<string, unknown> = {
       _meta: { app: "titan-apex", version: 1, tenant: ctx.tenant.code, exported_at: new Date().toISOString() },
     };
+    const counts: Record<string, number> = {};
     for (const t of [...DATA_TABLES, ...CHILD_TABLES, ...CONFIG_TABLES]) {
       const { data, error } = await ctx.supabase.from(t).select("*");
       if (error) return fail(dbError(error));
       out[t] = data;
+      if (data.length) counts[t] = data.length;
     }
+    await logActivity({
+      action: "backup",
+      actorId: ctx.profile.id,
+      entity: "tenant_data",
+      recordId: ctx.profile.tenant_id,
+      label: `Backup ${ctx.tenant.name}`,
+      meta: { format: "json", tables: counts },
+    });
     return ok(out);
   });
 }
@@ -245,7 +257,7 @@ export async function restoreTenant(backup: Record<string, unknown>): Promise<Ac
     const ctx = await masterCtx();
     const tenantId = ctx.profile.tenant_id;
     if (!backup || typeof backup !== "object" || !("customers" in backup)) return fail("File backup tidak valid");
-    const admin = createAdminClient();
+    const admin = createAdminClient(await activityHeaders(ctx.profile.id));
     const { data: members } = await admin.from("profiles").select("id").eq("tenant_id", tenantId);
     const memberIds = new Set((members ?? []).map((m) => m.id));
     const mapUser = (id: unknown) => (typeof id === "string" && memberIds.has(id) ? id : null);
@@ -330,6 +342,14 @@ export async function restoreTenant(backup: Record<string, unknown>): Promise<Ac
       }
       restored += items.length;
     }
+    await logActivity({
+      action: "restore",
+      actorId: ctx.profile.id,
+      entity: "tenant_data",
+      recordId: tenantId,
+      label: `${restored} baris`,
+      meta: { restored },
+    });
     refreshAll();
     return ok(undefined, `Restore berhasil (${restored} baris)`);
   });
@@ -339,7 +359,7 @@ export async function resetTenantData(confirmCode: string): Promise<ActionResult
   return run(async () => {
     const ctx = await masterCtx();
     if (confirmCode !== ctx.tenant.code) return fail("Kode konfirmasi salah");
-    const admin = createAdminClient();
+    const admin = createAdminClient(await activityHeaders(ctx.profile.id));
     const tenantId = ctx.profile.tenant_id;
     // Hapus file Storage tenant
     for (const t of DATA_TABLES) {
@@ -353,6 +373,13 @@ export async function resetTenantData(confirmCode: string): Promise<ActionResult
       const { error } = await admin.from(t).delete().eq("tenant_id", tenantId);
       if (error) return fail(`${t}: ${dbError(error)}`);
     }
+    await logActivity({
+      action: "reset_data",
+      actorId: ctx.profile.id,
+      entity: "tenant_data",
+      recordId: tenantId,
+      label: `Semua data operasional ${ctx.tenant.name}`,
+    });
     refreshAll();
     return ok(undefined, "Semua data operasional tenant dihapus");
   });

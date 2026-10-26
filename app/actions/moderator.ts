@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireModerator } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logActivity } from "@/lib/activity";
+import { activityHeaders } from "@/lib/request-context";
 import { activateSchema, moderatorCreateSchema, tenantSchema } from "@/lib/schemas/account";
 import { dbError, fail, ok, type ActionResult } from "@/lib/action-result";
 import { run } from "@/lib/safe-action";
@@ -11,10 +13,10 @@ import { run } from "@/lib/safe-action";
 /** Tenant baru / ubah tenant — hanya moderator. */
 export async function saveTenant(id: string | null, input: z.input<typeof tenantSchema>): Promise<ActionResult> {
   return run(async () => {
-    await requireModerator();
+    const { user } = await requireModerator();
     const parsed = tenantSchema.safeParse(input);
     if (!parsed.success) return fail(parsed.error.issues[0].message);
-    const admin = createAdminClient();
+    const admin = createAdminClient(await activityHeaders(user.id));
     const { error } = id
       ? await admin.from("tenants").update(parsed.data).eq("id", id)
       : await admin.from("tenants").insert(parsed.data);
@@ -27,13 +29,13 @@ export async function saveTenant(id: string | null, input: z.input<typeof tenant
 /** Akun baru oleh moderator — email terkonfirmasi & langsung aktif, tinggal login. */
 export async function createUserByModerator(input: z.input<typeof moderatorCreateSchema>): Promise<ActionResult> {
   return run(async () => {
-    await requireModerator();
+    const { user } = await requireModerator();
     const parsed = moderatorCreateSchema.safeParse(input);
     if (!parsed.success) return fail(parsed.error.issues[0].message);
     const v = parsed.data;
     const tenant_id = v.role === "moderator" ? null : v.tenant_id;
 
-    const admin = createAdminClient();
+    const admin = createAdminClient(await activityHeaders(user.id));
     const { data: taken } = await admin.from("profiles").select("id").eq("username", v.username).maybeSingle();
     if (taken) return fail("Username sudah dipakai");
 
@@ -54,6 +56,15 @@ export async function createUserByModerator(input: z.input<typeof moderatorCreat
       await admin.auth.admin.deleteUser(data.user.id);
       return fail(dbError(upErr));
     }
+    await logActivity({
+      action: "account_create",
+      actorId: user.id,
+      entity: "profiles",
+      recordId: data.user.id,
+      label: `${v.name} (@${v.username})`,
+      tenantId: tenant_id,
+      meta: { email: v.email, role: v.role },
+    });
     revalidatePath("/moderator");
     return ok(undefined, "Akun dibuat & aktif");
   });
@@ -73,7 +84,7 @@ export async function saveUserAssignment(userId: string, input: z.input<typeof a
     if (userId === user.id && (!v.active || v.role !== "moderator"))
       return fail("Tidak bisa menonaktifkan / menurunkan role diri sendiri");
 
-    const admin = createAdminClient();
+    const admin = createAdminClient(await activityHeaders(user.id));
     const { data: current } = await admin.from("profiles").select("role, active, tenant_id").eq("id", userId).single();
     if (!current) return fail("Akun tidak ditemukan");
 
@@ -111,8 +122,12 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
   return run(async () => {
     const { user } = await requireModerator();
     if (userId === user.id) return fail("Tidak bisa menghapus diri sendiri");
-    const admin = createAdminClient();
-    const { data: p } = await admin.from("profiles").select("role, active, tenant_id").eq("id", userId).single();
+    const admin = createAdminClient(await activityHeaders(user.id));
+    const { data: p } = await admin
+      .from("profiles")
+      .select("name, username, email, role, active, tenant_id")
+      .eq("id", userId)
+      .single();
     if (p?.role === "master" && p.active) {
       const { count } = await admin
         .from("profiles")
@@ -125,6 +140,16 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
     }
     const { error } = await admin.auth.admin.deleteUser(userId);
     if (error) return fail("Akun masih memiliki data. Nonaktifkan saja.");
+    if (p)
+      await logActivity({
+        action: "account_delete",
+        actorId: user.id,
+        entity: "profiles",
+        recordId: userId,
+        label: `${p.name} (@${p.username})`,
+        tenantId: p.tenant_id,
+        meta: { email: p.email, role: p.role },
+      });
     revalidatePath("/moderator");
     return ok(undefined, "Akun dihapus");
   });

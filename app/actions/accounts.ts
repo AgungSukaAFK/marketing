@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getAppContext } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logActivity } from "@/lib/activity";
+import { activityHeaders } from "@/lib/request-context";
 import { createAccountSchema, updateAccountSchema } from "@/lib/schemas/account";
 import { dbError, fail, ok, type ActionResult } from "@/lib/action-result";
 import { run } from "@/lib/safe-action";
@@ -22,11 +24,26 @@ async function managerContext() {
   return ctx;
 }
 
-async function loadTarget(userId: string, tenantId: string) {
-  const admin = createAdminClient();
-  const { data } = await admin.from("profiles").select("id, role, active, tenant_id").eq("id", userId).single();
-  if (!data || data.tenant_id !== tenantId) throw new Error("Akun tidak ditemukan di tenant ini");
-  return { admin, target: data as { id: string; role: TenantRole | null; active: boolean; tenant_id: string } };
+async function loadTarget(userId: string, ctx: Awaited<ReturnType<typeof managerContext>>) {
+  const admin = createAdminClient(await activityHeaders(ctx.profile.id));
+  const { data } = await admin
+    .from("profiles")
+    .select("id, name, username, email, role, active, tenant_id")
+    .eq("id", userId)
+    .single();
+  if (!data || data.tenant_id !== ctx.profile.tenant_id) throw new Error("Akun tidak ditemukan di tenant ini");
+  return {
+    admin,
+    target: data as {
+      id: string;
+      name: string;
+      username: string;
+      email: string;
+      role: TenantRole | null;
+      active: boolean;
+      tenant_id: string;
+    },
+  };
 }
 
 /** Minimal 1 Master aktif per tenant harus selalu ada. */
@@ -49,7 +66,7 @@ export async function createAccount(input: z.input<typeof createAccountSchema>):
     const v = parsed.data;
     if (!canManage(ctx.profile.role, v.role)) return fail("Admin hanya bisa membuat akun Sales");
 
-    const admin = createAdminClient();
+    const admin = createAdminClient(await activityHeaders(ctx.profile.id));
     const { data: taken } = await admin.from("profiles").select("id").eq("username", v.username).maybeSingle();
     if (taken) return fail("Username sudah dipakai");
 
@@ -66,6 +83,14 @@ export async function createAccount(input: z.input<typeof createAccountSchema>):
       .update({ tenant_id: ctx.profile.tenant_id, role: v.role, active: true })
       .eq("id", data.user.id);
     if (upErr) return fail(dbError(upErr));
+    await logActivity({
+      action: "account_create",
+      actorId: ctx.profile.id,
+      entity: "profiles",
+      recordId: data.user.id,
+      label: `${v.name} (@${v.username})`,
+      meta: { email: v.email, role: v.role },
+    });
     revalidatePath("/accounts");
     revalidatePath("/settings");
     return ok(undefined, "Akun ditambah");
@@ -78,7 +103,7 @@ export async function updateAccount(userId: string, input: z.input<typeof update
     const parsed = updateAccountSchema.safeParse(input);
     if (!parsed.success) return fail(parsed.error.issues[0].message);
     const v = parsed.data;
-    const { admin, target } = await loadTarget(userId, ctx.profile.tenant_id);
+    const { admin, target } = await loadTarget(userId, ctx);
     if (!canManage(ctx.profile.role, target.role)) return fail("Tidak berwenang");
     if (!canManage(ctx.profile.role, v.role)) return fail("Admin hanya bisa mengelola role Sales");
     if (userId === ctx.profile.id && (v.role !== target.role || !v.active))
@@ -102,10 +127,17 @@ export async function resetAccountPassword(userId: string, password: string): Pr
     const ctx = await managerContext();
     const pw = z.string().min(8, "Password minimal 8 karakter").max(72).safeParse(password);
     if (!pw.success) return fail(pw.error.issues[0].message);
-    const { admin, target } = await loadTarget(userId, ctx.profile.tenant_id);
+    const { admin, target } = await loadTarget(userId, ctx);
     if (!canManage(ctx.profile.role, target.role)) return fail("Tidak berwenang");
     const { error } = await admin.auth.admin.updateUserById(userId, { password: pw.data });
     if (error) return fail(error.message);
+    await logActivity({
+      action: "password_reset",
+      actorId: ctx.profile.id,
+      entity: "profiles",
+      recordId: userId,
+      label: `${target.name} (@${target.username})`,
+    });
     return ok(undefined, "Password direset");
   });
 }
@@ -114,11 +146,19 @@ export async function deleteAccount(userId: string): Promise<ActionResult> {
   return run(async () => {
     const ctx = await managerContext();
     if (userId === ctx.profile.id) return fail("Tidak bisa menghapus diri sendiri");
-    const { admin, target } = await loadTarget(userId, ctx.profile.tenant_id);
+    const { admin, target } = await loadTarget(userId, ctx);
     if (!canManage(ctx.profile.role, target.role)) return fail("Tidak berwenang");
     if (target.role === "master") await assertMasterRemains(admin, ctx.profile.tenant_id, userId);
     const { error } = await admin.auth.admin.deleteUser(userId);
     if (error) return fail("Akun masih memiliki data. Nonaktifkan saja akunnya.");
+    await logActivity({
+      action: "account_delete",
+      actorId: ctx.profile.id,
+      entity: "profiles",
+      recordId: userId,
+      label: `${target.name} (@${target.username})`,
+      meta: { email: target.email, role: target.role },
+    });
     revalidatePath("/accounts");
     revalidatePath("/settings");
     return ok(undefined, "Akun dihapus");

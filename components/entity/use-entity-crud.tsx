@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Download, FileSpreadsheet, FileText, FileType, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { deleteEntity } from "@/app/actions/entity";
+import { logExport } from "@/app/actions/activity";
+import { deleteEntity, getDownloadUrl } from "@/app/actions/entity";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,8 +26,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ENTITIES, toDisplayRow, toExportRow, type EntityKey, type Lookup, type Row } from "@/lib/entities";
 import { exportExcel, exportPDF, exportWord } from "@/lib/export";
-import { createClient } from "@/lib/supabase/client";
-import { STORAGE_BUCKET } from "@/lib/constants";
 import { EntityForm } from "./entity-form";
 import { ImportDialog } from "./import-dialog";
 import type { EntityLookups, Me } from "./types";
@@ -78,17 +77,18 @@ export function useEntityCrud({
         const body = rows.map((r) => toDisplayRow(def, r, lk));
         await (type === "pdf" ? exportPDF : exportWord)(def.title, headers, body, def.key);
       }
+      // Activity History; tidak ditunggu
+      void logExport({ entity: def.key, format: type, count: rows.length });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Export gagal");
     }
   };
 
   const download = async (path: string, name?: string) => {
-    const { data, error } = await createClient()
-      .storage.from(STORAGE_BUCKET)
-      .createSignedUrl(path, 60, { download: name || true });
-    if (error || !data) return toast.error("Gagal membuat link download");
-    window.open(data.signedUrl, "_blank", "noopener");
+    // link dibuat server supaya download tercatat di Activity History
+    const res = await getDownloadUrl(def.key, path, name);
+    if (!res.ok || !res.data) return toast.error(res.ok ? "Gagal membuat link download" : res.error);
+    window.open(res.data, "_blank", "noopener");
   };
 
   const toolbar = (

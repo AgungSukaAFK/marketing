@@ -1,5 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
+import { clientIp } from "@/lib/request-context";
 
 /**
  * Rate limit sederhana in-memory (per instance) untuk aksi auth.
@@ -8,8 +9,7 @@ import { headers } from "next/headers";
 const buckets = new Map<string, { count: number; reset: number }>();
 
 async function keyFor(scope: string) {
-  const h = await headers();
-  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "local";
+  const ip = clientIp(await headers()) || "local";
   return `${scope}:${ip}`;
 }
 

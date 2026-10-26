@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { logExport } from "@/app/actions/activity";
 import { exportExcel } from "@/lib/export";
 import { fmtDay, fmtNumber, fmtPercent, fmtRupiah } from "@/lib/format";
 import { DRILL_MAX_ROWS, DRILL_MODULE, type DrillCell, type DrillColumn, type DrillResult } from "@/lib/insights/drill";
@@ -163,6 +164,7 @@ export function DrillDialog({ request, onClose }: { request: DrillOpen | null; o
         ),
         request.title.replace(/[^\w-]+/g, "_"),
       );
+      void logExport({ entity: "insights", format: "excel", count: rows.length, title: request.title });
     } finally {
       setExporting(false);
     }

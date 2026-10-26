@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2, Pencil, Plus, Search, Trash2, UserCheck } from "lucide-react";
+import { Building2, History, Pencil, Plus, Search, Trash2, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import type { z } from "zod";
 import { createUserByModerator, deleteUser, saveTenant, saveUserAssignment } from "@/app/actions/moderator";
@@ -33,6 +33,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ROLE_LABEL, type Role } from "@/lib/constants";
 import { fmtDateTime } from "@/lib/format";
 import { activateSchema, moderatorCreateSchema, tenantSchema } from "@/lib/schemas/account";
+import type { ActivityFilters } from "./activity-cells";
+import { ActivityView } from "./activity-view";
 
 export type ModUser = {
   id: string;
@@ -57,7 +59,19 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
   const [deleting, setDeleting] = useState<ModUser | null>(null);
   const [tenantEdit, setTenantEdit] = useState<Tenant | "new" | null>(null);
   const [creating, setCreating] = useState(false);
+  const [tab, setTab] = useState("users");
+  // Activity History dimuat saat tab pertama kali dibuka; key baru = mulai dengan filter baru
+  const [activity, setActivity] = useState<{ key: number; initial?: ActivityFilters } | null>(null);
   const [, start] = useTransition();
+
+  const openTab = (v: string) => {
+    setTab(v);
+    if (v === "activity" && !activity) setActivity({ key: 0 });
+  };
+  const openHistory = (u: ModUser) => {
+    setActivity((a) => ({ key: (a?.key ?? 0) + 1, initial: { actor: u.id } }));
+    setTab("activity");
+  };
 
   const tenantName = useMemo(() => new Map(tenants.map((t) => [t.id, t.name])), [tenants]);
   const pendingCount = users.filter((u) => !u.active).length;
@@ -69,7 +83,7 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
     });
 
   return (
-    <Tabs defaultValue="users" className="col-span-12 gap-4">
+    <Tabs value={tab} onValueChange={openTab} className="col-span-12 gap-4">
       <TabsList>
         <TabsTrigger value="users">
           <UserCheck /> Akun
@@ -81,6 +95,9 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
         </TabsTrigger>
         <TabsTrigger value="tenants">
           <Building2 /> Company / Tenant
+        </TabsTrigger>
+        <TabsTrigger value="activity">
+          <History /> Activity History
         </TabsTrigger>
       </TabsList>
 
@@ -146,6 +163,15 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
                         <div className="flex items-center gap-1">
                           <Button size="sm" variant={u.active ? "outline" : "default"} onClick={() => setAssigning(u)}>
                             {u.active ? <Pencil /> : <UserCheck />} {u.active ? "Edit" : "Aktifkan"}
+                          </Button>
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            title="Activity history akun ini"
+                            aria-label="Activity history akun ini"
+                            onClick={() => openHistory(u)}
+                          >
+                            <History />
                           </Button>
                           {u.id !== meId && (
                             <Button
@@ -225,6 +251,11 @@ export function ModeratorView({ users, tenants, meId }: { users: ModUser[]; tena
             </Table>
           </div>
         </Content>
+      </TabsContent>
+
+      {/* forceMount: filter & halaman tetap saat pindah tab */}
+      <TabsContent value="activity" forceMount className="data-[state=inactive]:hidden">
+        {activity && <ActivityView key={activity.key} users={users} tenants={tenants} initial={activity.initial} />}
       </TabsContent>
 
       <AssignDialog user={assigning} tenants={tenants} isSelf={assigning?.id === meId} onClose={() => setAssigning(null)} onSaved={() => router.refresh()} />

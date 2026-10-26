@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { getAppContext } from "@/lib/auth";
 import { dbError, fail, ok, type ActionResult } from "@/lib/action-result";
+import { logActivity } from "@/lib/activity";
 import {
   ENTITIES,
   MAX_IMPORT_ERRORS,
@@ -129,6 +130,15 @@ export async function importQuotation(
       inserted++;
     }
     if (!opts.dryRun) revalidatePath(ENTITIES.quotation.href);
+    if (!opts.dryRun && inserted)
+      await logActivity({
+        action: "import",
+        actorId: ctx.profile.id,
+        entity: "quotation",
+        recordId: null,
+        label: `${inserted} quotation`,
+        meta: { inserted, skipped: errors.length, rows: rows.length },
+      });
     return ok({ inserted, skipped: errors.length, errors: errors.slice(0, MAX_IMPORT_ERRORS) });
   } catch (e) {
     unstable_rethrow(e);

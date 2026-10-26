@@ -1,6 +1,7 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { activityHeaders } from "@/lib/request-context";
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -9,6 +10,8 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // id request, IP & perangkat untuk Activity History (trigger activity_capture)
+      global: { headers: await activityHeaders() },
       cookies: {
         getAll() {
           return cookieStore.getAll();

@@ -5,12 +5,16 @@ import { createClient } from "@supabase/supabase-js";
  * Client service_role — MELEWATI RLS. Hanya untuk server action yang sudah
  * memeriksa role pemanggil (kelola akun, aktivasi moderator). Jangan pernah
  * diimpor dari komponen client.
+ *
+ * Untuk menulis data, kirim `headers` dari `activityHeaders(actorId)` supaya
+ * perubahan tercatat di Activity History atas nama pelaku (bukan "Sistem").
  */
-export function createAdminClient() {
+export function createAdminClient(headers?: Record<string, string>) {
   const url = env("NEXT_PUBLIC_SUPABASE_URL");
   const key = env("SUPABASE_SERVICE_ROLE_KEY");
   return createClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
+    ...(headers && { global: { headers } }),
   });
 }
 

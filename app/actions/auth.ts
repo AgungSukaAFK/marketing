@@ -7,6 +7,7 @@ import { loginSchema, passwordSchema, registerSchema } from "@/lib/schemas/auth"
 import { createClient } from "@/lib/supabase/server";
 import { hit, isLimited, rateLimit } from "@/lib/rate-limit";
 import { fail, ok, type ActionResult } from "@/lib/action-result";
+import { logActivity } from "@/lib/activity";
 import { run } from "@/lib/safe-action";
 
 export async function login(input: z.input<typeof loginSchema>, next?: string): Promise<ActionResult> {
@@ -20,6 +21,12 @@ export async function login(input: z.input<typeof loginSchema>, next?: string): 
     const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
     if (error || !data.user) {
       await hit("login");
+      await logActivity({
+        action: "login_failed",
+        email: parsed.data.email,
+        entity: "auth",
+        meta: { email: parsed.data.email, reason: "Email atau password salah" },
+      });
       return fail("Email atau password salah");
     }
 
@@ -31,11 +38,18 @@ export async function login(input: z.input<typeof loginSchema>, next?: string): 
 
     if (!profile?.active) {
       await supabase.auth.signOut();
+      await logActivity({
+        action: "login_failed",
+        actorId: data.user.id,
+        entity: "auth",
+        meta: { email: parsed.data.email, reason: "Akun belum diaktifkan" },
+      });
       return fail("Akun belum diaktifkan. Hubungi moderator untuk aktivasi.");
     }
 
     await supabase.from("login_history").insert({ user_id: data.user.id, tenant_id: profile.tenant_id, action: "LOGIN" });
     await supabase.rpc("touch_last_seen");
+    await logActivity({ action: "login", actorId: data.user.id, entity: "auth" });
 
     const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
     redirect(profile.role === "moderator" ? "/moderator" : safeNext ?? "/dashboard");
@@ -62,6 +76,15 @@ export async function register(input: z.input<typeof registerSchema>): Promise<A
     if (error) return fail(error.message.includes("registered") ? "Email sudah terdaftar" : error.message);
     // "Confirm email" dimatikan → signUp langsung membuat sesi. Akun belum aktif, jadi keluarkan lagi.
     if (data.session) await supabase.auth.signOut();
+    if (data.user)
+      await logActivity({
+        action: "register",
+        actorId: data.user.id,
+        entity: "profiles",
+        recordId: data.user.id,
+        label: `${name} (@${username})`,
+        meta: { email, username },
+      });
     return ok(undefined, "Registrasi berhasil. Akun Anda menunggu aktivasi oleh moderator.");
   });
 }
@@ -77,6 +100,7 @@ export async function forgotPassword(email: string): Promise<ActionResult> {
     await supabase.auth.resetPasswordForEmail(parsed.data, {
       redirectTo: `${origin}/auth/callback?next=/reset-password`,
     });
+    await logActivity({ action: "password_forgot", email: parsed.data, entity: "auth", meta: { email: parsed.data } });
     // Selalu sukses agar tidak membocorkan email mana yang terdaftar
     return ok(undefined, "Jika email terdaftar, link reset password sudah dikirim.");
   });
@@ -87,8 +111,9 @@ export async function updatePassword(input: z.input<typeof passwordSchema>): Pro
     const parsed = passwordSchema.safeParse(input);
     if (!parsed.success) return fail(parsed.error.issues[0].message);
     const supabase = await createClient();
-    const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+    const { data, error } = await supabase.auth.updateUser({ password: parsed.data.password });
     if (error) return fail(error.message);
+    await logActivity({ action: "password_change", actorId: data.user.id, entity: "auth" });
     return ok(undefined, "Password diperbarui");
   });
 }
@@ -103,6 +128,7 @@ export async function logout() {
     if (profile?.active) {
       await supabase.from("login_history").insert({ user_id: user.id, tenant_id: profile.tenant_id, action: "LOGOUT" });
     }
+    await logActivity({ action: "logout", actorId: user.id, entity: "auth" });
   }
   await supabase.auth.signOut();
   redirect("/login");
