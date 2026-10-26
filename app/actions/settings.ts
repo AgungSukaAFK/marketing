@@ -4,12 +4,22 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getAppContext } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { todayWIB } from "@/lib/anniversary";
 import { dbError, fail, ok, type ActionResult } from "@/lib/action-result";
 import { run } from "@/lib/safe-action";
 import { BASE_MENUS, DEFAULT_APP_NAME, MENU_ICONS, STORAGE_BUCKET } from "@/lib/constants";
 import { DEFAULT_ACCENT, isAccentTheme } from "@/lib/accent-options";
 import { DEFAULT_FONT_FAMILY, isFontFamily } from "@/lib/font-options";
-import { ENTITIES, filePathFields, type EntityKey } from "@/lib/entities";
+import {
+  ENTITIES,
+  asAttachments,
+  fileColumns,
+  fileListFields,
+  filePathFields,
+  quotationItemSchema,
+  rowFilePaths,
+  type EntityKey,
+} from "@/lib/entities";
 
 async function managerCtx() {
   const ctx = await getAppContext();
@@ -188,10 +198,32 @@ export async function deleteCustomMenu(id: string): Promise<ActionResult> {
 /** urutan aman terhadap foreign key */
 const DATA_TABLES: EntityKey[] = [
   "customers", "sales_forecast", "sales_daily", "admin_daily", "pipeline", "quotation",
-  "forecast_trend", "actual_vs_forecast", "documentation", "refreshment", "evaluation",
+  "actual_vs_forecast", "documentation", "refreshment", "evaluation",
 ];
 const CONFIG_TABLES = ["app_settings", "menu_config", "custom_menus", "access_control"] as const;
-const GENERATED_COLS: Partial<Record<EntityKey, string[]>> = { quotation: ["total", "margin_rp"] };
+/** Tabel anak tanpa menu sendiri: ikut dibackup, direstore bersama induknya. */
+const CHILD_TABLES = ["quotation_items"] as const;
+
+const chunks = <T,>(list: T[], size = 200) =>
+  Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size));
+
+/** Barang quotation dari backup. Backup lama (sebelum multi-barang) menyimpan satu barang di baris quotation. */
+function backupQuotationItems(backup: Record<string, unknown>): Record<string, unknown>[] {
+  if (Array.isArray(backup.quotation_items)) return backup.quotation_items as Record<string, unknown>[];
+  const quots = Array.isArray(backup.quotation) ? (backup.quotation as Record<string, unknown>[]) : [];
+  return quots
+    .filter((q) => "po_status" in q)
+    .map((q) => ({
+      quotation_id: q.id,
+      position: 0,
+      part: String(q.part ?? "").trim() || "-",
+      harga: q.harga,
+      qty: q.qty,
+      margin_p: q.margin_p,
+      status: ["Win", "Loss", "Cancel"].includes(String(q.po_status)) ? q.po_status : "Negosiasi",
+      created_at: q.created_at,
+    }));
+}
 
 export async function backupTenant(): Promise<ActionResult<Record<string, unknown>>> {
   return run(async () => {
@@ -199,7 +231,7 @@ export async function backupTenant(): Promise<ActionResult<Record<string, unknow
     const out: Record<string, unknown> = {
       _meta: { app: "titan-apex", version: 1, tenant: ctx.tenant.code, exported_at: new Date().toISOString() },
     };
-    for (const t of [...DATA_TABLES, ...CONFIG_TABLES]) {
+    for (const t of [...DATA_TABLES, ...CHILD_TABLES, ...CONFIG_TABLES]) {
       const { data, error } = await ctx.supabase.from(t).select("*");
       if (error) return fail(dbError(error));
       out[t] = data;
@@ -219,12 +251,27 @@ export async function restoreTenant(backup: Record<string, unknown>): Promise<Ac
     const mapUser = (id: unknown) => (typeof id === "string" && memberIds.has(id) ? id : null);
 
     let restored = 0;
+    const restoredQuotations: string[] = [];
     for (const t of DATA_TABLES) {
       const rows = backup[t];
       if (!Array.isArray(rows) || !rows.length) continue;
       const def = ENTITIES[t];
       const clean: Record<string, unknown>[] = [];
       for (const r of rows as Record<string, unknown>[]) {
+        // backup lama: tanggal opsional berformat teks bebas (mis. ultah "12 Mar") → simpan di note, kosongkan
+        for (const f of def.fields) {
+          if (f.type !== "date") continue;
+          const shape = def.schema.shape[f.name] as z.ZodType;
+          // backup sebelum kolom tanggal wajib ada (mis. admin_daily.tanggal) → tanggal dibuat (WIB)
+          if (r[f.name] === undefined && typeof r.created_at === "string" && !shape.safeParse(undefined).success)
+            r[f.name] = todayWIB(new Date(r.created_at));
+          if (f.required || r[f.name] == null || r[f.name] === "") continue;
+          const one = shape.safeParse(r[f.name]);
+          if (one.success) continue;
+          if ("note" in def.schema.shape && String(r[f.name]).trim() !== "-")
+            r.note = [r.note, `${f.label} (data lama): ${r[f.name]}`].filter(Boolean).join("\n");
+          r[f.name] = null;
+        }
         const parsed = def.schema.safeParse(r);
         if (!parsed.success || typeof r.id !== "string") continue;
         const row: Record<string, unknown> = {
@@ -240,7 +287,9 @@ export async function restoreTenant(backup: Record<string, unknown>): Promise<Ac
           // path file dari tenant lain tidak boleh dibawa
           if (typeof r[f] === "string" && (r[f] as string).startsWith(`${tenantId}/`)) row[f] = r[f];
         }
-        for (const g of GENERATED_COLS[t] ?? []) delete row[g];
+        for (const f of fileListFields(def)) {
+          row[f] = asAttachments(row[f]).filter((a) => a.path.startsWith(`${tenantId}/`));
+        }
         clean.push(row);
       }
       if (!clean.length) continue;
@@ -252,6 +301,34 @@ export async function restoreTenant(backup: Record<string, unknown>): Promise<Ac
       const { error } = await admin.from(t).upsert(safe, { onConflict: "id" });
       if (error) return fail(`${t}: ${dbError(error)}`);
       restored += safe.length;
+      if (t === "quotation") restoredQuotations.push(...safe.map((c) => c.id as string));
+    }
+
+    // Barang quotation: diganti penuh untuk quotation yang direstore (id baru dari DB)
+    if (restoredQuotations.length) {
+      const ids = new Set(restoredQuotations);
+      const items: Record<string, unknown>[] = [];
+      for (const r of backupQuotationItems(backup)) {
+        if (typeof r.quotation_id !== "string" || !ids.has(r.quotation_id)) continue;
+        const parsed = quotationItemSchema.safeParse(r);
+        if (!parsed.success) continue;
+        items.push({
+          ...parsed.data,
+          quotation_id: r.quotation_id,
+          position: Number(r.position) || 0,
+          tenant_id: tenantId,
+          ...(typeof r.created_at === "string" ? { created_at: r.created_at } : {}),
+        });
+      }
+      for (const part of chunks(restoredQuotations)) {
+        const { error } = await admin.from("quotation_items").delete().in("quotation_id", part).eq("tenant_id", tenantId);
+        if (error) return fail(`quotation_items: ${dbError(error)}`);
+      }
+      for (const part of chunks(items, 500)) {
+        const { error } = await admin.from("quotation_items").insert(part);
+        if (error) return fail(`quotation_items: ${dbError(error)}`);
+      }
+      restored += items.length;
     }
     refreshAll();
     return ok(undefined, `Restore berhasil (${restored} baris)`);
@@ -266,12 +343,10 @@ export async function resetTenantData(confirmCode: string): Promise<ActionResult
     const tenantId = ctx.profile.tenant_id;
     // Hapus file Storage tenant
     for (const t of DATA_TABLES) {
-      const paths = filePathFields(ENTITIES[t]);
-      if (!paths.length) continue;
-      const { data } = await admin.from(t).select(paths.join(",")).eq("tenant_id", tenantId);
-      const files = (data ?? [])
-        .flatMap((r) => paths.map((p) => (r as unknown as Record<string, string | null>)[p]))
-        .filter((p): p is string => !!p);
+      const cols = fileColumns(ENTITIES[t]);
+      if (!cols.length) continue;
+      const { data } = await admin.from(t).select(cols.join(",")).eq("tenant_id", tenantId);
+      const files = (data ?? []).flatMap((r) => rowFilePaths(ENTITIES[t], r as unknown as Record<string, unknown>));
       if (files.length) await admin.storage.from(STORAGE_BUCKET).remove(files);
     }
     for (const t of [...DATA_TABLES].reverse()) {

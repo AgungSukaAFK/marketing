@@ -61,7 +61,7 @@ Master/Admin juga bisa langsung membuat akun di menu **Akun** (akun dibuat langs
 ```
 app/
   (auth)/          login, register, forgot, reset-password
-  (app)/           layout (sidebar + header + presence) & 15 modul + custom/[key]
+  (app)/           layout (sidebar + header + presence) & 16 modul + custom/[key]
   moderator/       panel moderator (akun & company)
   actions/         server actions: entity (CRUD generik), auth, accounts, moderator, settings
 components/
@@ -113,5 +113,7 @@ Menambah modul CRUD baru: tambahkan definisi di `lib/entities.ts` + tabel/RLS di
 
 - Rate limit login/register/lupa password masih **in-memory per instance** — untuk Vercel multi-instance ganti dengan
   store bersama (mis. Upstash Redis) di `lib/rate-limit.ts`.
-- Import Excel memakai header kolom = nama field (sama dengan hasil Export Excel), maks. 2000 baris.
+- Import Excel memakai header kolom = nama field (sama dengan hasil Export Excel), maks. 2000 baris. Dialog Import
+  menyediakan template kosong (petunjuk + daftar customer/user valid) dan preview validasi sebelum data disimpan.
+  Kolom `owner` (username) hanya bisa diisi user lain oleh Master/Admin; lampiran tidak ikut di-import.
 - Restore JSON menimpa baris ber-ID sama di tenant sendiri; ID milik tenant lain diabaikan.

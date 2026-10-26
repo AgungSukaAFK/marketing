@@ -36,6 +36,8 @@ export type TableFilter<T> = {
   label: string;
   options: { value: string; label: string }[];
   get: (row: T) => string | null | undefined;
+  /** pencocokan kustom (mis. "salah satu barang berstatus X"); default: get(row) === nilai */
+  match?: (row: T, value: string) => boolean;
 };
 
 /** meta kolom TanStack: rata kanan untuk angka/uang/persen. */
@@ -140,7 +142,11 @@ export function DataTable<T>({
   const filtered = useMemo(
     () =>
       data.filter((row) =>
-        filters.every((f) => !filterValues[f.key] || (f.get(row) ?? "") === filterValues[f.key]),
+        filters.every(
+          (f) =>
+            !filterValues[f.key] ||
+            (f.match ? f.match(row, filterValues[f.key]) : (f.get(row) ?? "") === filterValues[f.key]),
+        ),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data, filters, JSON.stringify(filterValues)],

@@ -74,11 +74,33 @@ export async function exportWord(title: string, headers: string[], body: string[
   download(await d.Packer.toBlob(doc), `${name}_${stamp()}.docx`);
 }
 
+/** Workbook beberapa sheet (array of arrays); lebar kolom mengikuti isi. */
+export async function exportWorkbook(sheets: { name: string; rows: unknown[][] }[], filename: string) {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.utils.book_new();
+  for (const s of sheets) {
+    const ws = XLSX.utils.aoa_to_sheet(s.rows);
+    const widths: number[] = [];
+    for (const r of s.rows) r.forEach((v, i) => (widths[i] = Math.max(widths[i] ?? 10, String(v ?? "").length + 2)));
+    ws["!cols"] = widths.map((w) => ({ wch: Math.min(w, 70) }));
+    XLSX.utils.book_append_sheet(wb, ws, s.name);
+  }
+  XLSX.writeFile(wb, filename);
+}
+
 export async function readExcel(file: File): Promise<Record<string, unknown>[]> {
   const XLSX = await import("xlsx");
-  const wb = XLSX.read(await file.arrayBuffer());
+  // raw: CSV dibaca apa adanya — "03/04/2025" jangan ditebak sebagai tanggal format US
+  const wb = XLSX.read(await file.arrayBuffer(), { cellNF: true, raw: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "", raw: false });
+  // sel bertipe tanggal di Excel → "YYYY-MM-DD" (format yang diterima form), apa pun format
+  // tampilannya (dateNF tidak berlaku untuk sel yang punya format sendiri, mis. d/m/yyyy)
+  for (const [addr, c] of Object.entries(ws)) {
+    if (addr[0] !== "!" && c.t === "n" && c.z && XLSX.SSF.is_date(c.z)) c.w = XLSX.SSF.format("yyyy-mm-dd", c.v);
+  }
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "", raw: false });
+  // nomor baris asli (non-enumerable dari SheetJS, hilang saat dikirim ke server action)
+  return rows.map((r) => ({ ...r, __row: Number((r as { __rowNum__?: number }).__rowNum__) + 1 }));
 }
 
 export function downloadJSON(data: unknown, filename: string) {

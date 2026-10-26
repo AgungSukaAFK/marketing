@@ -2,13 +2,25 @@
 
 import { revalidatePath } from "next/cache";
 import { getAppContext } from "@/lib/auth";
-import { ENTITIES, filePathFields, type EntityDef, type EntityKey } from "@/lib/entities";
+import {
+  ENTITIES,
+  MAX_IMPORT_ERRORS,
+  MAX_IMPORT_ROWS,
+  asAttachments,
+  fileColumns,
+  fileListFields,
+  filePathFields,
+  importLine,
+  rowFilePaths,
+  type EntityDef,
+  type EntityKey,
+  type ImportResult,
+} from "@/lib/entities";
 import { dbError, fail, ok, type ActionResult } from "@/lib/action-result";
 import { PIPELINE_STAGES, STORAGE_BUCKET } from "@/lib/constants";
 import { z } from "zod";
 import { unstable_rethrow } from "next/navigation";
-
-const MAX_IMPORT_ROWS = 2000;
+import { importQuotation } from "./quotation";
 
 async function guard(key: string) {
   if (!Object.hasOwn(ENTITIES, key)) throw new Error("Entitas tidak dikenal");
@@ -27,15 +39,18 @@ function firstIssue(error: { issues: { path: PropertyKey[]; message: string }[] 
 /** Sales tidak bisa meng-assign data ke sales lain; path file harus milik tenant. */
 function normalize(def: EntityDef, data: Record<string, unknown>, ctx: Awaited<ReturnType<typeof getAppContext>>) {
   if (ctx.profile.role === "sales" && "sales_id" in data) data.sales_id = ctx.profile.id;
+  const validPath = (p: unknown) =>
+    typeof p === "string" && p.startsWith(`${ctx.profile.tenant_id}/${def.table}/`) && !p.includes("..");
   for (const f of filePathFields(def)) {
     const p = data[f];
     if (p == null) {
       delete data[f];
       continue;
     }
-    if (typeof p !== "string" || !p.startsWith(`${ctx.profile.tenant_id}/${def.table}/`) || p.includes("..")) {
-      throw new Error("Path file tidak valid");
-    }
+    if (!validPath(p)) throw new Error("Path file tidak valid");
+  }
+  for (const f of fileListFields(def)) {
+    if (!asAttachments(data[f]).every((a) => validPath(a.path))) throw new Error("Path file tidak valid");
   }
   return data;
 }
@@ -55,11 +70,13 @@ export async function saveEntity(key: string, id: string | null, raw: unknown): 
 
     const { supabase } = ctx;
     if (id) {
-      const replaced = filePathFields(def).filter((f) => f in data);
+      const replaced = fileColumns(def).filter((f) => f in data);
       let oldPaths: string[] = [];
       if (replaced.length) {
         const { data: old } = await supabase.from(def.table).select(replaced.join(",")).eq("id", id).maybeSingle();
-        oldPaths = replaced.map((f) => (old as Record<string, string | null> | null)?.[f]).filter((p): p is string => !!p);
+        // file lama yang tidak lagi dipakai baris ini (diganti / dibuang dari daftar lampiran)
+        const kept = new Set(rowFilePaths(def, data));
+        oldPaths = rowFilePaths(def, old as Record<string, unknown> | null).filter((p) => !kept.has(p));
       }
       const { data: rows, error } = await supabase.from(def.table).update(data).eq("id", id).select("id");
       if (error) return fail(dbError(error));
@@ -81,17 +98,14 @@ export async function deleteEntity(key: string, id: string): Promise<ActionResul
   try {
     const { def, ctx, denied } = await guard(key);
     if (denied) return fail("Akses menu ditolak");
-    const paths = filePathFields(def);
     const { data: rows, error } = await ctx.supabase
       .from(def.table)
       .delete()
       .eq("id", id)
-      .select(["id", ...paths].join(","));
+      .select(["id", ...fileColumns(def)].join(","));
     if (error) return fail(dbError(error));
     if (!rows?.length) return fail("Data tidak ditemukan atau tidak berwenang");
-    const files = paths
-      .map((p) => (rows[0] as unknown as Record<string, string | null>)[p])
-      .filter((p): p is string => !!p);
+    const files = rowFilePaths(def, rows[0] as unknown as Record<string, unknown>);
     if (files.length) await ctx.supabase.storage.from(STORAGE_BUCKET).remove(files);
     revalidatePath(def.href);
     return ok(undefined, "Dihapus");
@@ -102,13 +116,17 @@ export async function deleteEntity(key: string, id: string): Promise<ActionResul
 }
 
 /**
- * Import Excel: kolom = nama field (sama dengan hasil Export Excel).
- * `customer_code` → customer_id, `sales` (username) → sales_id. Divalidasi Zod per baris.
+ * Import Excel: kolom = nama field (sama dengan hasil Export Excel / template).
+ * `customer_code` → customer_id, `sales` (username) → sales_id, `owner` (username)
+ * → pemilik data. Divalidasi Zod per baris; `dryRun` hanya memvalidasi (preview).
  */
 export async function importEntity(
   key: string,
   rows: Record<string, unknown>[],
-): Promise<ActionResult<{ inserted: number; errors: string[] }>> {
+  opts: { dryRun?: boolean } = {},
+): Promise<ActionResult<ImportResult>> {
+  // quotation: satu baris per barang, digabung per quot_no
+  if (key === "quotation") return importQuotation(rows, opts);
   try {
     const { def, ctx, denied } = await guard(key);
     if (denied) return fail("Akses menu ditolak");
@@ -118,6 +136,10 @@ export async function importEntity(
     const { supabase } = ctx;
     const needsCustomer = def.fields.some((f) => f.type === "customer");
     const userField = def.fields.find((f) => f.type === "user");
+    // RLS insert memaksa owner = pembuat → owner lain di-set lewat update setelah insert,
+    // dan hanya Master/Admin yang boleh (sama dengan trigger guard_tenant_owner)
+    const hasOwner = def.columns.some((c) => c.key === "owner");
+    const manager = ctx.profile.role === "master" || ctx.profile.role === "admin";
     const [custRes, profRes] = await Promise.all([
       needsCustomer ? supabase.from("customers").select("id, customer_code") : Promise.resolve({ data: [] }),
       supabase.from("profiles").select("id, username"),
@@ -126,34 +148,57 @@ export async function importEntity(
     const userByName = new Map((profRes.data ?? []).map((p) => [String(p.username), p.id as string]));
 
     const valid: Record<string, unknown>[] = [];
+    const reassign = new Map<string, string[]>(); // owner → id baris
     const errors: string[] = [];
     rows.forEach((r, i) => {
+      const line = `Baris ${importLine(r, i)}`;
       const rawRow: Record<string, unknown> = {};
       for (const f of def.fields) {
-        if (f.type === "file") continue;
+        if (f.type === "file" || f.type === "files") continue;
         if (f.type === "customer") {
           const code = String(r.customer_code ?? "").trim();
           rawRow[f.name] = code ? custByCode.get(code) ?? "__unknown__" : "";
         } else if (f.type === "user") {
           const u = String(r.sales ?? r[f.name] ?? "").trim();
           rawRow[f.name] = u ? userByName.get(u) ?? "__unknown__" : "";
+        } else if (f.type === "users") {
+          // "budi.santoso, rina" → [id, id]
+          const names = String(r[f.name] ?? "").split(",").map((u) => u.trim()).filter(Boolean);
+          const unknown = names.filter((u) => !userByName.has(u));
+          if (unknown.length) rawRow.__unknownUsers = `${f.name} "${unknown.join(", ")}"`;
+          rawRow[f.name] = names.map((u) => userByName.get(u)).filter(Boolean);
         } else {
           rawRow[f.name] = r[f.name] ?? "";
         }
       }
-      if (rawRow.customer_id === "__unknown__") return void errors.push(`Baris ${i + 2}: customer_code "${r.customer_code}" tidak ditemukan`);
-      if (userField && rawRow[userField.name] === "__unknown__") return void errors.push(`Baris ${i + 2}: sales "${r.sales}" tidak ditemukan`);
+      if (rawRow.customer_id === "__unknown__") return void errors.push(`${line}: customer_code "${r.customer_code}" tidak ditemukan`);
+      if (userField && rawRow[userField.name] === "__unknown__") return void errors.push(`${line}: sales "${r.sales}" tidak ditemukan`);
+      if (rawRow.__unknownUsers) return void errors.push(`${line}: ${rawRow.__unknownUsers} tidak ditemukan`);
+      const ownerName = hasOwner ? String(r.owner ?? "").trim() : "";
+      const owner = ownerName ? userByName.get(ownerName) : undefined;
+      if (ownerName && !owner) return void errors.push(`${line}: owner "${ownerName}" tidak ditemukan`);
+      if (owner && owner !== ctx.profile.id && !manager)
+        return void errors.push(`${line}: owner user lain hanya bisa diisi Master/Admin`);
       const parsed = def.schema.safeParse(rawRow);
-      if (!parsed.success) return void errors.push(`Baris ${i + 2}: ${firstIssue(parsed.error)}`);
-      valid.push(normalize(def, { ...parsed.data }, ctx));
+      if (!parsed.success) return void errors.push(`${line}: ${firstIssue(parsed.error)}`);
+      const row = normalize(def, { ...parsed.data, id: crypto.randomUUID() }, ctx);
+      if (owner && owner !== ctx.profile.id) reassign.set(owner, [...(reassign.get(owner) ?? []), row.id as string]);
+      valid.push(row);
     });
 
-    if (valid.length) {
+    if (valid.length && !opts.dryRun) {
       const { error } = await supabase.from(def.table).insert(valid);
       if (error) return fail(dbError(error));
+      revalidatePath(def.href);
+      for (const [owner, ids] of reassign) {
+        // dicicil supaya URL filter `id=in.(…)` tidak terlalu panjang
+        for (let i = 0; i < ids.length; i += 100) {
+          const { error: ownerErr } = await supabase.from(def.table).update({ owner }).in("id", ids.slice(i, i + 100));
+          if (ownerErr) return fail(`${valid.length} data sudah masuk, tetapi owner gagal diubah: ${dbError(ownerErr)}`);
+        }
+      }
     }
-    revalidatePath(def.href);
-    return ok({ inserted: valid.length, errors: errors.slice(0, 20) });
+    return ok({ inserted: valid.length, skipped: errors.length, errors: errors.slice(0, MAX_IMPORT_ERRORS) });
   } catch (e) {
     unstable_rethrow(e);
     return fail(e instanceof Error ? e.message : "Import gagal");
@@ -175,8 +220,6 @@ export async function createPipelineFromActivity(activityId: string): Promise<Ac
     sales_id: act.owner,
     stage: "Market Map",
     value: 100000000,
-    product: (act.note ?? "").slice(0, 30) || null,
-    prob: 10,
   });
   if (insErr) return fail(dbError(insErr));
   revalidatePath("/pipeline");

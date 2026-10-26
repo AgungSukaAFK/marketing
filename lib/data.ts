@@ -4,18 +4,19 @@ import { ENTITIES, type CustomerLite, type EntityKey, type ForecastLite, type Pr
 import type { EntityLookups, Me } from "@/components/entity/types";
 
 /** Data untuk halaman entitas: baris (RLS), lookup customer/forecast/profil, dan user aktif. */
-export async function loadEntity(key: EntityKey) {
+export async function loadEntity(key: EntityKey, opts: { customers?: boolean } = {}) {
   const def = ENTITIES[key];
   const ctx = await requireMenu(def.menuId);
   const { supabase, profile } = ctx;
 
-  const needCustomers = def.fields.some((f) => f.type === "customer");
+  // customers: false → form memakai pencarian server-side (maks. 20), daftar lengkap tidak perlu dimuat
+  const needCustomers = opts.customers !== false && def.fields.some((f) => f.type === "customer");
   const needForecasts = def.fields.some((f) => f.type === "forecast");
 
   let query = supabase.from(def.table).select(def.select);
-  query = def.orderBy
-    ? query.order(def.orderBy.column, { ascending: def.orderBy.ascending })
-    : query.order("created_at", { ascending: false });
+  if (def.orderBy) query = query.order(def.orderBy.column, { ascending: def.orderBy.ascending });
+  // urutan kedua: yang terbaru dibuat di atas (mis. beberapa aktivitas di tanggal yang sama)
+  query = query.order("created_at", { ascending: false });
 
   const [rows, profiles, customers, forecasts] = await Promise.all([
     query,

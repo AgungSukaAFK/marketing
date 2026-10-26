@@ -33,12 +33,12 @@ export const metadata: Metadata = {
 };
 
 const FEATURES = [
-  { icon: Kanban, title: "Pipeline Engine", desc: "Pantau peluang dari prospek hingga handover dalam papan kanban." },
+  { icon: Kanban, title: "Pipeline Progress", desc: "Pantau progress tiap deal dari prospek hingga good receive, lengkap dengan riwayat tiap step." },
   { icon: TrendingUp, title: "Sales Forecast", desc: "Proyeksi penjualan per periode, dibandingkan langsung dengan realisasi." },
   { icon: FileText, title: "Monitoring Quotation", desc: "Lacak status penawaran harga agar follow-up tidak terlewat." },
   { icon: ClipboardList, title: "Daily Activity", desc: "Catatan aktivitas harian Sales & Admin yang rapi dan mudah diaudit." },
   { icon: Building2, title: "Customer DB", desc: "Database pelanggan terpusat dengan Customer Code terintegrasi." },
-  { icon: BarChart3, title: "Analytics & Trend", desc: "Tren forecast, performa tim, dan evaluasi bulanan sales." },
+  { icon: BarChart3, title: "Analytics & Trend", desc: "Pencapaian sales, performa tim, dan evaluasi bulanan." },
   { icon: GraduationCap, title: "Refreshment & Assessment", desc: "Pelatihan dan penilaian berkala untuk menjaga kualitas tim." },
   { icon: Palette, title: "App Customizer", desc: "Atur nama aplikasi, warna aksen, font, dan menu per perusahaan." },
 ];
@@ -58,7 +58,7 @@ const SHOWCASE = [
     eyebrow: "Skala industri",
     title: "Forecast yang bisa dipertanggungjawabkan",
     desc: "Bandingkan forecast dengan realisasi, lihat tren antar periode, dan temukan deviasi lebih awal untuk proyek bernilai besar.",
-    points: ["Forecast Trend Analysis", "Sales Actual vs Forecast", "Evaluasi bulanan otomatis"],
+    points: ["Sales Actual", "Sales Actual vs Forecast", "Evaluasi bulanan otomatis"],
   },
 ];
 

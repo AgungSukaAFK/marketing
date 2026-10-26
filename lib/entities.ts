@@ -3,8 +3,8 @@
  * validasi Zod (dipakai di client DAN di server action).
  */
 import { z } from "zod";
-import { OPTIONS, PIPELINE_STAGES } from "@/lib/constants";
-import { fmtNumber, fmtPercent, fmtRupiah, pct, toNumber } from "@/lib/format";
+import { OPTIONS, PIPELINE_STAGES, stageProgress } from "@/lib/constants";
+import { fmtDay, fmtNumber, fmtPercent, fmtRupiah, pct, toNumber } from "@/lib/format";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Row = { id: string; owner: string; created_at: string; [k: string]: any };
@@ -27,7 +27,13 @@ export type Lookup = {
 
 export type FieldType =
   | "text" | "email" | "number" | "date" | "month" | "select" | "textarea"
-  | "customer" | "forecast" | "user" | "file";
+  | "customer" | "forecast" | "user" | "users" | "file" | "files";
+
+/** Satu lampiran pada field "files" (disimpan sebagai array jsonb). */
+export type Attachment = { path: string; name: string; size: number };
+
+export const MAX_ATTACHMENT_MB = 100;
+export const MAX_ATTACHMENTS = 20;
 
 export type FieldDef = {
   name: string;
@@ -37,7 +43,7 @@ export type FieldDef = {
   required?: boolean;
   /** nilai awal saat "Tambah" */
   initial?: string | number | ((me: ProfileLite) => string | number);
-  /** untuk type "file": kolom path & nama file di tabel */
+  /** untuk type "file": kolom path & nama file di tabel. Type "files" menyimpan Attachment[] di kolom `name`. */
   pathField?: string;
   nameField?: string;
   accept?: string;
@@ -51,18 +57,20 @@ export type FieldDef = {
   suffix?: string;
 };
 
-export type ColumnKind = "text" | "code" | "money" | "number" | "percent" | "badge" | "mono";
+export type ColumnKind = "text" | "code" | "money" | "number" | "percent" | "badge" | "mono" | "date";
 
 export type ColumnDef = {
   key: string;
   header: string;
   kind?: ColumnKind;
   get: (row: Row, lk: Lookup) => string | number | null | undefined;
+  /** baris kedua di bawah nilai (mis. Part Description di bawah Part No); ikut dicari & diexport PDF/Word */
+  sub?: (row: Row, lk: Lookup) => string | null | undefined;
 };
 
 export type EntityKey =
   | "customers" | "sales_daily" | "admin_daily" | "pipeline" | "sales_forecast" | "quotation"
-  | "forecast_trend" | "actual_vs_forecast" | "documentation" | "refreshment" | "evaluation";
+  | "actual_vs_forecast" | "documentation" | "refreshment" | "evaluation";
 
 export type EntityDef = {
   key: EntityKey;
@@ -78,6 +86,8 @@ export type EntityDef = {
   schema: z.ZodObject<z.ZodRawShape>;
   /** ringkasan nilai turunan di form (live) */
   preview?: (v: Record<string, unknown>) => { label: string; value: string }[];
+  /** export Excel kustom (mis. satu baris per barang); default toExportRow */
+  exportRows?: (row: Row, lk: Lookup) => Record<string, unknown>[];
 };
 
 // ---------------------------------------------------------------------------
@@ -113,22 +123,51 @@ const oneOf = (opts: readonly string[], label: string) =>
   z.string().refine((v) => opts.includes(v), `${label} tidak valid`);
 
 const reqId = (label: string) => z.guid(`${label} wajib dipilih`);
+/** Daftar user (type "users"): form mengirim id dipisah koma, DB menyimpan uuid[]. */
+const idList = (max = 50) =>
+  z
+    .union([z.string(), z.array(z.string()), z.null(), z.undefined()])
+    .transform((v) => [...new Set((Array.isArray(v) ? v : String(v ?? "").split(",")).map((s) => s.trim()).filter(Boolean))])
+    .pipe(z.array(z.guid("User tidak valid")).max(max, `Maksimal ${max} user`));
 const optId = z
   .union([z.guid(), z.literal(""), z.null(), z.undefined()])
   .transform((v) => v || null);
 
+/** Terima "YYYY-MM-DD" atau "DD/MM/YYYY" (mis. dari import Excel) → "YYYY-MM-DD". */
+const toIsoDate = (v: string) => {
+  const t = v.trim();
+  const m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(t);
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : t;
+};
+const isoDate = z.string().refine((v) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+}, "Tanggal tidak valid");
+
 const dateStr = (required: boolean) =>
   required
-    ? z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal tidak valid")
+    ? z.string().transform(toIsoDate).pipe(isoDate)
     : z
         .union([z.string(), z.null(), z.undefined()])
-        .transform((v) => v || null)
-        .pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal tidak valid").nullable());
+        .transform((v) => (v ? toIsoDate(v) || null : null))
+        .pipe(isoDate.nullable());
 
 const monthStr = z.string().regex(/^\d{4}-\d{2}$/, "Periode harus format YYYY-MM");
 
 /** path file Storage — divalidasi lagi di server (harus diawali tenant_id/) */
 const filePath = z.string().max(500).nullable().optional();
+
+const attachmentList = z
+  .array(
+    z.object({
+      path: z.string().min(1).max(500),
+      name: z.string().min(1).max(255),
+      size: z.number().int().min(0).max(MAX_ATTACHMENT_MB * 1024 * 1024, `Maksimal ${MAX_ATTACHMENT_MB} MB per file`),
+    }),
+  )
+  .max(MAX_ATTACHMENTS, `Maksimal ${MAX_ATTACHMENTS} lampiran`)
+  .default([]);
 
 // ---------------------------------------------------------------------------
 // Kolom helper
@@ -141,6 +180,12 @@ const salesCol = (key = "sales_id"): ColumnDef => ({
   header: "Sales",
   get: (r, lk) => (r[key] ? lk.profiles.get(r[key])?.username : null),
 });
+/** uuid[] → "budi.santoso, rina" */
+const usernames = (ids: unknown, lk: Lookup) =>
+  (Array.isArray(ids) ? ids : [])
+    .map((id) => lk.profiles.get(id)?.username)
+    .filter(Boolean)
+    .join(", ");
 const col = (key: string, header: string, kind?: ColumnKind): ColumnDef => ({ key, header, kind, get: (r) => r[key] });
 
 const customerField: FieldDef = { name: "customer_id", label: "Customer Code", type: "customer", required: true };
@@ -169,7 +214,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       { name: "jabatan", label: "Jabatan", type: "text" },
       { name: "site", label: "Site", type: "text" },
       { name: "cuti", label: "Lokasi Cuti", type: "text" },
-      { name: "ultah", label: "Ulang Tahun", type: "text" },
+      { name: "ultah", label: "Ulang Tahun Perusahaan", type: "date" },
       { name: "tinggal", label: "Tempat Tinggal", type: "text" },
       { name: "note", label: "Note", type: "textarea" },
       { name: "sales_id", label: "Sales", type: "user", initial: (me) => me.id },
@@ -183,6 +228,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       col("email", "Email"),
       col("jabatan", "Jabatan"),
       col("site", "Site"),
+      col("ultah", "Ultah", "date"),
       col("note", "Note"),
     ],
     schema: z.object({
@@ -193,7 +239,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       jabatan: optText(),
       site: optText(),
       cuti: optText(),
-      ultah: optText(50),
+      ultah: dateStr(false),
       tinggal: optText(),
       note: optText(2000),
       sales_id: optId,
@@ -243,37 +289,51 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     menuId: "admin_daily",
     href: "/admin-daily",
     select: `*, ${CUSTOMER_JOIN}`,
+    orderBy: { column: "tanggal", ascending: false },
     fields: [
+      { name: "tanggal", label: "Tanggal", type: "date", initial: today },
       customerField,
       { name: "type", label: "Type", type: "select", options: OPTIONS.adminDailyType, initial: "PO Input" },
       { name: "ref_no", label: "Ref No", type: "text" },
       { name: "dokumen", label: "Dokumen", type: "text" },
       { name: "status", label: "Status", type: "select", options: OPTIONS.adminDailyStatus, initial: "Draft" },
+      { name: "attachments", label: "Attach Dokumen", type: "files" },
     ],
-    columns: [custCode, col("type", "Type"), col("ref_no", "Ref"), custPt, col("dokumen", "Dok"), col("status", "Status", "badge"), ownerCol],
+    columns: [
+      col("tanggal", "Tanggal", "date"),
+      custCode,
+      col("type", "Type"),
+      col("ref_no", "Ref"),
+      custPt,
+      col("dokumen", "Dok"),
+      { key: "attachments", header: "Lampiran", get: (r) => (r.attachments?.length ? `${r.attachments.length} file` : null) },
+      col("status", "Status", "badge"),
+      ownerCol,
+    ],
     schema: z.object({
+      tanggal: dateStr(true),
       customer_id: reqId("Customer Code"),
       type: oneOf(OPTIONS.adminDailyType, "Type"),
       ref_no: optText(100),
       dokumen: optText(),
       status: oneOf(OPTIONS.adminDailyStatus, "Status"),
+      attachments: attachmentList,
     }),
   },
 
   pipeline: {
     key: "pipeline",
     table: "pipeline",
-    title: "Pipeline Engine",
+    title: "Pipeline Progress",
     menuId: "pipeline",
     href: "/pipeline",
-    select: `*, ${CUSTOMER_JOIN}`,
+    select: `*, ${CUSTOMER_JOIN}, history:pipeline_history(id, from_stage, to_stage, changed_by, changed_at)`,
     fields: [
       customerField,
       { name: "sales_id", label: "Sales", type: "user", initial: (me) => me.id },
       { name: "stage", label: "Stage", type: "select", options: PIPELINE_STAGES, initial: "Market Map" },
       { name: "value", label: "Value", type: "number", initial: 100000000, money: true },
-      { name: "product", label: "Product", type: "text" },
-      { name: "prob", label: "Probabilitas", type: "number", initial: 10, suffix: "%" },
+      { name: "kategori", label: "Kategori", type: "select", options: OPTIONS.pipelineKategori, required: true },
     ],
     columns: [
       custCode,
@@ -281,16 +341,15 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       salesCol(),
       col("stage", "Stage", "badge"),
       col("value", "Value", "money"),
-      col("product", "Product"),
-      { key: "prob", header: "Prob", kind: "percent", get: (r) => toNumber(r.prob) },
+      col("kategori", "Kategori"),
+      { key: "progress", header: "Progress", kind: "percent", get: (r) => stageProgress(r.stage) },
     ],
     schema: z.object({
       customer_id: reqId("Customer Code"),
       sales_id: optId,
       stage: oneOf(PIPELINE_STAGES, "Stage"),
       value: num({ min: 0 }),
-      product: optText(),
-      prob: num({ min: 0, max: 100, int: true }),
+      kategori: oneOf(OPTIONS.pipelineKategori, "Kategori"),
     }),
   },
 
@@ -305,7 +364,8 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       customerField,
       { name: "sales_id", label: "Sales", type: "user", fromCustomer: "sales_id" },
       { name: "part_no", label: "Part No", type: "text", required: true },
-      { name: "deskripsi", label: "Deskripsi", type: "text" },
+      { name: "deskripsi", label: "Part Description", type: "text" },
+      { name: "kategori", label: "Kategori", type: "select", options: OPTIONS.forecastKategori, required: true },
       { name: "periode", label: "Periode", type: "month", initial: thisMonth },
       { name: "t_qty", label: "Target Qty", type: "number" },
       { name: "t_rp", label: "Target Rp", type: "number", money: true },
@@ -318,7 +378,8 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       custCode,
       salesCol(),
       custPt,
-      col("part_no", "Part No", "mono"),
+      { ...col("part_no", "Part", "mono"), sub: (r) => r.deskripsi },
+      col("kategori", "Kategori"),
       col("periode", "Periode"),
       col("t_qty", "T.Qty", "number"),
       col("t_rp", "T.Rp", "money"),
@@ -334,6 +395,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       sales_id: optId,
       part_no: reqText("Part No", 100),
       deskripsi: optText(),
+      kategori: oneOf(OPTIONS.forecastKategori, "Kategori"),
       periode: monthStr,
       t_qty: num({ min: 0 }),
       t_rp: num({ min: 0 }),
@@ -348,113 +410,46 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     ],
   },
 
+  // Header saja — barang (quotation_items) diisi di halaman /quotation/new & /quotation/[id]/edit,
+  // divalidasi quotationFormSchema dan disimpan atomik lewat RPC save_quotation.
   quotation: {
     key: "quotation",
     table: "quotation",
     title: "Monitoring Quotation",
     menuId: "quotation",
     href: "/quotation",
-    select: `*, ${CUSTOMER_JOIN}`,
+    select: `*, ${CUSTOMER_JOIN}, items:quotation_items(id, position, part, harga, qty, margin_p, total, margin_rp, status)`,
     orderBy: { column: "tgl_quot", ascending: false },
     fields: [
       customerField,
       { name: "quot_no", label: "Quot No", type: "text", required: true, initial: () => `QT-${Date.now().toString().slice(-4)}` },
+      { name: "kode_accurate", label: "Kode Accurate", type: "text" },
       { name: "tgl_quot", label: "Tgl Quot", type: "date", initial: today },
       { name: "tgl_exp", label: "Tgl Exp", type: "date" },
-      { name: "part", label: "Part", type: "text" },
-      { name: "harga", label: "Harga", type: "number", money: true },
-      { name: "qty", label: "Qty", type: "number", initial: 1 },
-      { name: "margin_p", label: "Margin", type: "number", initial: 15, suffix: "%" },
-      { name: "po_status", label: "PO Status", type: "select", options: OPTIONS.poStatus, initial: "Pending" },
-      { name: "loss", label: "Loss", type: "number", money: true },
-      { name: "remarks", label: "Remarks", type: "text" },
+      { name: "remarks", label: "Remarks", type: "textarea" },
     ],
     columns: [
       custCode,
       col("quot_no", "Quot No", "mono"),
+      col("kode_accurate", "Kode Accurate", "mono"),
       custPt,
-      col("tgl_quot", "Tgl"),
-      col("tgl_exp", "Exp"),
-      col("part", "Part"),
-      col("harga", "Harga", "money"),
-      col("qty", "Qty", "number"),
-      col("total", "Total", "money"),
-      { key: "margin_p", header: "Margin%", kind: "percent", get: (r) => toNumber(r.margin_p) },
-      col("margin_rp", "Margin Rp", "money"),
-      col("po_status", "PO", "badge"),
+      col("tgl_quot", "Tgl", "date"),
+      col("tgl_exp", "Exp", "date"),
+      { key: "items", header: "Barang", get: (r) => quotationItems(r).map((i) => i.part).join(", ") || null },
+      { key: "total", header: "Total", kind: "money", get: (r) => quotationTotals(quotationItems(r)).total },
+      { key: "margin_rp", header: "Margin Rp", kind: "money", get: (r) => quotationTotals(quotationItems(r)).margin },
+      { key: "loss", header: "Loss", kind: "money", get: (r) => quotationTotals(quotationItems(r)).loss },
+      { key: "status", header: "Status", get: (r) => statusSummary(quotationItems(r)) || null },
     ],
     schema: z.object({
       customer_id: reqId("Customer Code"),
       quot_no: reqText("Quot No", 100),
+      kode_accurate: optText(100),
       tgl_quot: dateStr(false),
       tgl_exp: dateStr(false),
-      part: optText(),
-      harga: num({ min: 0 }),
-      qty: num({ min: 0 }),
-      margin_p: num({ min: -100, max: 100 }),
-      po_status: oneOf(OPTIONS.poStatus, "PO Status"),
-      loss: num({ min: 0 }),
-      remarks: optText(),
+      remarks: optText(2000),
     }),
-    preview: (v) => {
-      const total = toNumber(v.harga) * toNumber(v.qty);
-      return [
-        { label: "Total", value: fmtRupiah(total) },
-        { label: "Margin Rp", value: fmtRupiah(Math.round((total * toNumber(v.margin_p)) / 100)) },
-      ];
-    },
-  },
-
-  forecast_trend: {
-    key: "forecast_trend",
-    table: "forecast_trend",
-    title: "Forecast Trend Analysis",
-    menuId: "trend",
-    href: "/forecast-trend",
-    select: "*, forecast:sales_forecast(part_no, sales_id, customer:customers(customer_code, pt))",
-    fields: [
-      { name: "forecast_ref", label: "Referensi Forecast", type: "forecast", required: true },
-      { name: "smt1_qty", label: "SMT1 Qty", type: "number" },
-      { name: "smt2_qty", label: "SMT2 Qty", type: "number" },
-      { name: "actual_2025", label: "Actual 2025", type: "number" },
-      { name: "forecast_2026", label: "Forecast 2026", type: "number" },
-      { name: "alasan", label: "Alasan", type: "textarea" },
-    ],
-    columns: [
-      { key: "customer_code", header: "Code", kind: "code", get: (r) => r.forecast?.customer?.customer_code },
-      { key: "pt", header: "PT", get: (r) => r.forecast?.customer?.pt },
-      { key: "sales", header: "Sales", get: (r, lk) => lk.profiles.get(r.forecast?.sales_id)?.username },
-      { key: "part_no", header: "Part", kind: "mono", get: (r) => r.forecast?.part_no },
-      col("smt1_qty", "SMT1", "number"),
-      col("smt2_qty", "SMT2", "number"),
-      col("actual_2025", "Actual25", "number"),
-      col("forecast_2026", "Fc26", "number"),
-      {
-        key: "dev",
-        header: "Dev%",
-        kind: "percent",
-        get: (r) => pct(toNumber(r.forecast_2026) - toNumber(r.actual_2025), r.actual_2025),
-      },
-      {
-        key: "ach",
-        header: "ACH%",
-        kind: "percent",
-        get: (r) => pct(toNumber(r.smt1_qty) + toNumber(r.smt2_qty), r.forecast_2026),
-      },
-      col("alasan", "Alasan"),
-    ],
-    schema: z.object({
-      forecast_ref: reqId("Referensi Forecast"),
-      smt1_qty: num({ min: 0 }),
-      smt2_qty: num({ min: 0 }),
-      actual_2025: num({ min: 0 }),
-      forecast_2026: num({ min: 0 }),
-      alasan: optText(2000),
-    }),
-    preview: (v) => [
-      { label: "Deviasi", value: fmtPercent(pct(toNumber(v.forecast_2026) - toNumber(v.actual_2025), v.actual_2025)) },
-      { label: "ACH", value: fmtPercent(pct(toNumber(v.smt1_qty) + toNumber(v.smt2_qty), v.forecast_2026)) },
-    ],
+    exportRows: quotationExportRows,
   },
 
   actual_vs_forecast: {
@@ -467,13 +462,14 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     fields: [
       customerField,
       { name: "part_no", label: "Part No", type: "text", required: true },
+      { name: "deskripsi", label: "Part Description", type: "text" },
       { name: "target_qty", label: "Target Qty", type: "number" },
       { name: "actual_qty", label: "Actual Qty", type: "number" },
     ],
     columns: [
       custCode,
       custPt,
-      col("part_no", "Part", "mono"),
+      { ...col("part_no", "Part", "mono"), sub: (r) => r.deskripsi },
       col("target_qty", "Target", "number"),
       col("actual_qty", "Actual", "number"),
       { key: "short_qty", header: "Short Qty", kind: "number", get: (r) => toNumber(r.target_qty) - toNumber(r.actual_qty) },
@@ -493,6 +489,7 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     schema: z.object({
       customer_id: reqId("Customer Code"),
       part_no: reqText("Part No", 100),
+      deskripsi: optText(),
       target_qty: num({ min: 0 }),
       actual_qty: num({ min: 0 }),
     }),
@@ -539,29 +536,32 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
       { name: "jenis", label: "Jenis", type: "select", options: OPTIONS.refreshmentJenis, initial: "Weekly Brainstorming" },
       { name: "topik", label: "Topik", type: "text", required: true },
       { name: "durasi", label: "Durasi", type: "number", initial: 30, suffix: "menit" },
-      { name: "peserta", label: "Peserta", type: "text", initial: (me) => me.username },
+      { name: "peserta", label: "Peserta", type: "users", initial: (me) => me.id },
       { name: "nilai", label: "Nilai", type: "text" },
       { name: "ringkasan", label: "Ringkasan", type: "textarea" },
       { name: "status", label: "Status", type: "select", options: OPTIONS.refreshmentStatus, initial: "Terjadwal" },
+      { name: "attachments", label: "Attach Dokumen", type: "files" },
     ],
     columns: [
-      col("tanggal", "Tanggal"),
+      col("tanggal", "Tanggal", "date"),
       col("jenis", "Jenis"),
       col("topik", "Topik"),
       { key: "durasi", header: "Durasi", get: (r) => `${toNumber(r.durasi)} mnt` },
-      col("peserta", "Peserta"),
+      { key: "peserta", header: "Peserta", get: (r, lk) => usernames(r.peserta, lk) || null },
       col("nilai", "Nilai"),
       col("status", "Status", "badge"),
+      { key: "attachments", header: "Lampiran", get: (r) => (r.attachments?.length ? `${r.attachments.length} file` : null) },
     ],
     schema: z.object({
       tanggal: dateStr(true),
       jenis: oneOf(OPTIONS.refreshmentJenis, "Jenis"),
       topik: reqText("Topik"),
       durasi: num({ min: 0, int: true }),
-      peserta: optText(),
+      peserta: idList(),
       nilai: optText(50),
       ringkasan: optText(2000),
       status: oneOf(OPTIONS.refreshmentStatus, "Status"),
+      attachments: attachmentList,
     }),
   },
 
@@ -604,9 +604,124 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Quotation: barang & status negosiasi per barang
+// ---------------------------------------------------------------------------
+export const MAX_QUOTATION_ITEMS = 100;
+
+export type QuotationStatus = (typeof OPTIONS.quotationStatus)[number];
+export type QuotationItem = {
+  id?: string;
+  position: number;
+  part: string;
+  harga: number;
+  qty: number;
+  margin_p: number;
+  total: number;
+  margin_rp: number;
+  status: QuotationStatus;
+};
+
+/** Barang quotation (join `items`) terurut sesuai posisi input. */
+export function quotationItems(row: Row): QuotationItem[] {
+  return Array.isArray(row.items) ? [...(row.items as QuotationItem[])].sort((a, b) => a.position - b.position) : [];
+}
+
+/** Total, margin, nilai Win & Loss (Loss otomatis = total barang berstatus Loss). */
+export function quotationTotals(items: { harga: unknown; qty: unknown; margin_p: unknown; status: string }[]) {
+  const out = { total: 0, margin: 0, win: 0, loss: 0 };
+  for (const i of items) {
+    const total = toNumber(i.harga) * toNumber(i.qty);
+    out.total += total;
+    out.margin += Math.round((total * toNumber(i.margin_p)) / 100);
+    if (i.status === "Win") out.win += total;
+    if (i.status === "Loss") out.loss += total;
+  }
+  return out;
+}
+
+/** Jumlah barang per status, urut sesuai OPTIONS.quotationStatus. */
+export function statusCounts(items: { status: string }[]) {
+  return OPTIONS.quotationStatus
+    .map((s) => ({ status: s, count: items.filter((i) => i.status === s).length }))
+    .filter((s) => s.count);
+}
+
+/** "Win 2, Negosiasi 1" — untuk export & pencarian tabel. */
+export const statusSummary = (items: { status: string }[]) =>
+  statusCounts(items).map((s) => `${s.status} ${s.count}`).join(", ");
+
+export const quotationItemSchema = z.object({
+  part: reqText("Part", 300),
+  qty: num({ min: 0 }).refine((n) => n > 0, "Qty harus lebih dari 0"),
+  harga: num({ min: 0 }),
+  margin_p: num({ min: -100, max: 100 }),
+  status: oneOf(OPTIONS.quotationStatus, "Status"),
+});
+
+/** Form halaman create/edit quotation (client & server action). */
+export const quotationFormSchema = ENTITIES.quotation.schema
+  .extend({
+    items: z
+      .array(quotationItemSchema)
+      .min(1, "Minimal 1 barang")
+      .max(MAX_QUOTATION_ITEMS, `Maksimal ${MAX_QUOTATION_ITEMS} barang`),
+  })
+  .superRefine((v, ctx) => {
+    if (v.tgl_quot && v.tgl_exp && v.tgl_exp < v.tgl_quot)
+      ctx.addIssue({ code: "custom", path: ["tgl_exp"], message: "Tgl Exp tidak boleh sebelum Tgl Quot" });
+  });
+
+/** Satu baris Excel per barang (header quotation diulang) — format yang sama dipakai import. */
+export function quotationExportRows(row: Row): Record<string, unknown>[] {
+  const header = {
+    customer_code: row.customer?.customer_code ?? "",
+    quot_no: row.quot_no ?? "",
+    kode_accurate: row.kode_accurate ?? "",
+    tgl_quot: row.tgl_quot ?? "",
+    tgl_exp: row.tgl_exp ?? "",
+    remarks: row.remarks ?? "",
+  };
+  const items = quotationItems(row);
+  if (!items.length) return [header];
+  return items.map((i) => ({
+    ...header,
+    part: i.part,
+    qty: toNumber(i.qty),
+    harga: toNumber(i.harga),
+    margin_p: toNumber(i.margin_p),
+    status: i.status,
+    total: toNumber(i.total),
+    margin_rp: toNumber(i.margin_rp),
+  }));
+}
+
 /** Field yang menyimpan path Storage untuk satu entitas */
 export function filePathFields(def: EntityDef): string[] {
   return def.fields.filter((f) => f.type === "file" && f.pathField).map((f) => f.pathField!);
+}
+
+/** Field lampiran ganda (type "files", kolom jsonb Attachment[]) */
+export function fileListFields(def: EntityDef): string[] {
+  return def.fields.filter((f) => f.type === "files").map((f) => f.name);
+}
+
+/** Semua kolom yang menyimpan file (untuk select sebelum hapus) */
+export function fileColumns(def: EntityDef): string[] {
+  return [...filePathFields(def), ...fileListFields(def)];
+}
+
+export function asAttachments(v: unknown): Attachment[] {
+  return Array.isArray(v) ? (v as Attachment[]).filter((a) => a && typeof a.path === "string") : [];
+}
+
+/** Semua path Storage milik satu baris (file tunggal + lampiran ganda) */
+export function rowFilePaths(def: EntityDef, row: Record<string, unknown> | null | undefined): string[] {
+  if (!row) return [];
+  return [
+    ...filePathFields(def).map((f) => row[f]),
+    ...fileListFields(def).flatMap((f) => asAttachments(row[f]).map((a) => a.path)),
+  ].filter((p): p is string => typeof p === "string" && !!p);
 }
 
 /** Baris → objek datar untuk export Excel (header = nama field, bisa di-import ulang) */
@@ -617,7 +732,12 @@ export function toExportRow(def: EntityDef, row: Row, lk: Lookup): Record<string
       if (f.nameField) out[f.nameField] = row[f.nameField] ?? "";
       continue;
     }
+    if (f.type === "files") {
+      out[f.name] = asAttachments(row[f.name]).map((a) => a.name).join(", ");
+      continue;
+    }
     if (f.type === "customer") out.customer_code = row.customer?.customer_code ?? "";
+    else if (f.type === "users") out[f.name] = usernames(row[f.name], lk);
     else if (f.type === "user") out.sales = row[f.name] ? lk.profiles.get(row[f.name])?.username ?? "" : "";
     else if (f.type === "forecast") out.forecast_ref = row[f.name];
     else out[f.name] = row[f.name] ?? "";
@@ -627,9 +747,63 @@ export function toExportRow(def: EntityDef, row: Row, lk: Lookup): Record<string
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Import Excel
+// ---------------------------------------------------------------------------
+export const MAX_IMPORT_ROWS = 2000;
+export const MAX_IMPORT_ERRORS = 100;
+
+export type ImportResult = {
+  /** dryRun: jumlah data yang akan masuk */
+  inserted: number;
+  /** jumlah baris/data yang dilewati karena error */
+  skipped: number;
+  /** pesan error (maks. MAX_IMPORT_ERRORS) */
+  errors: string[];
+};
+
+/** Nomor baris di Excel: readExcel menyimpan `__row` (baris kosong dilewati SheetJS). */
+export const importLine = (r: Record<string, unknown>, i: number) => Number(r.__row) || i + 2;
+
+export type ImportColumn = { key: string; label: string; required: boolean; hint: string };
+
+/**
+ * Kolom template import — nama & urutan sama dengan yang dibaca importEntity
+ * (dan hasil Export Excel). Wajib atau tidak diturunkan dari schema Zod.
+ */
+export function importColumns(def: EntityDef): ImportColumn[] {
+  const out: ImportColumn[] = [];
+  for (const f of def.fields) {
+    if (f.type === "file" || f.type === "files") continue;
+    const required = !(def.schema.shape[f.name] as z.ZodType).safeParse("").success;
+    const add = (key: string, hint: string) => out.push({ key, label: f.label, required, hint });
+    if (f.type === "customer") add("customer_code", 'Kode customer dari sheet "Customer" (harus sudah ada di Customer DB)');
+    else if (f.type === "user") add("sales", 'Username dari sheet "User"');
+    else if (f.type === "users") add(f.name, 'Satu atau lebih username dari sheet "User", dipisah koma');
+    else if (f.type === "select") add(f.name, `Salah satu: ${f.options?.join(", ")}`);
+    else if (f.type === "date") add(f.name, "Format YYYY-MM-DD atau DD/MM/YYYY (sel tanggal Excel juga bisa)");
+    else if (f.type === "month") add(f.name, "Format YYYY-MM, mis. 2026-10");
+    else if (f.type === "number") add(f.name, `${f.money ? "Rupiah tanpa titik/Rp, mis. 1500000" : "Angka"}. Kosong = 0`);
+    else if (f.type === "email") add(f.name, "Alamat email");
+    else add(f.name, "Teks bebas");
+  }
+  if (def.columns.some((c) => c.key === "owner"))
+    out.push({
+      key: "owner",
+      label: "Owner",
+      required: false,
+      hint: 'Username dari sheet "User". Kosong = akun yang meng-import. User lain hanya bisa diisi Master/Admin',
+    });
+  return out;
+}
+
 /** Baris → nilai tampilan (untuk PDF/Word) */
 export function toDisplayRow(def: EntityDef, row: Row, lk: Lookup): string[] {
-  return def.columns.map((c) => formatCell(c, c.get(row, lk)));
+  return def.columns.map((c) => {
+    const v = formatCell(c, c.get(row, lk));
+    const sub = c.sub?.(row, lk);
+    return sub ? `${v} - ${sub}` : v;
+  });
 }
 
 export function formatCell(c: Pick<ColumnDef, "kind">, v: unknown): string {
@@ -641,6 +815,8 @@ export function formatCell(c: Pick<ColumnDef, "kind">, v: unknown): string {
       return fmtNumber(v);
     case "percent":
       return fmtPercent(toNumber(v));
+    case "date":
+      return fmtDay(String(v));
     default:
       return String(v);
   }

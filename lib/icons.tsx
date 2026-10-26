@@ -1,7 +1,7 @@
 import {
   BarChart3, BookOpen, Briefcase, Building2, ClipboardList, Contact, Database, FileCheck, FileCog,
   FileText, FolderArchive, Globe, GraduationCap, Kanban, LayoutDashboard, Link, Notebook, PieChart,
-  Scale, Settings, Shield, Star, TrendingUp, Users, Zap, type LucideIcon,
+  Scale, Settings, Shield, Star, Target, TrendingUp, Users, Zap, type LucideIcon,
 } from "lucide-react";
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -30,6 +30,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   notebook: Notebook,
   "file-check": FileCheck,
   contact: Contact,
+  target: Target,
 };
 
 export function MenuIcon({ name, className }: { name: string; className?: string }) {

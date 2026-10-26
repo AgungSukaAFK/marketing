@@ -52,7 +52,13 @@ export function allMenusOrdered(cfg: MenuConfig, custom: CustomMenuRow[]): Resol
     })),
   ];
   const ordered = cfg.menu_order.map((id) => all.find((m) => m.id === id)).filter((m): m is ResolvedMenu => !!m);
-  for (const m of all) if (!ordered.includes(m)) ordered.push(m);
+  // menu baru yang belum ada di urutan tersimpan: sisipkan setelah menu bawaan sebelumnya
+  all.forEach((m, i) => {
+    if (ordered.includes(m)) return;
+    const at = i > 0 ? ordered.indexOf(all[i - 1]) : -1;
+    if (at === -1 || m.custom) ordered.push(m);
+    else ordered.splice(at + 1, 0, m);
+  });
   return ordered;
 }
 

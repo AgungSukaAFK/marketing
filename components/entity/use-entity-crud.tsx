@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Download, FileSpreadsheet, FileText, FileType, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { deleteEntity, importEntity } from "@/app/actions/entity";
+import { deleteEntity } from "@/app/actions/entity";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,10 +24,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ENTITIES, toDisplayRow, toExportRow, type EntityKey, type Lookup, type Row } from "@/lib/entities";
-import { exportExcel, exportPDF, exportWord, readExcel } from "@/lib/export";
+import { exportExcel, exportPDF, exportWord } from "@/lib/export";
 import { createClient } from "@/lib/supabase/client";
 import { STORAGE_BUCKET } from "@/lib/constants";
 import { EntityForm } from "./entity-form";
+import { ImportDialog } from "./import-dialog";
 import type { EntityLookups, Me } from "./types";
 
 /** State & aksi CRUD bersama untuk tabel, board, dan kanban. */
@@ -35,19 +37,22 @@ export function useEntityCrud({
   rows,
   lookups,
   me,
+  createHref,
 }: {
   entity: EntityKey;
   rows: Row[];
   lookups: EntityLookups;
   me: Me;
+  /** "Tambah" membuka halaman ini, bukan dialog form */
+  createHref?: string;
 }) {
   const def = ENTITIES[entity];
   const router = useRouter();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState<Row | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [busy, startTransition] = useTransition();
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const lk: Lookup = useMemo(() => ({ profiles: new Map(lookups.profiles.map((p) => [p.id, p])) }), [lookups.profiles]);
 
@@ -63,7 +68,11 @@ export function useEntityCrud({
   const doExport = async (type: "excel" | "pdf" | "word") => {
     if (!rows.length) return toast.error("Tidak ada data");
     try {
-      if (type === "excel") await exportExcel(rows.map((r) => toExportRow(def, r, lk)), def.key);
+      if (type === "excel")
+        await exportExcel(
+          def.exportRows ? rows.flatMap((r) => def.exportRows!(r, lk)) : rows.map((r) => toExportRow(def, r, lk)),
+          def.key,
+        );
       else {
         const headers = def.columns.map((c) => c.header);
         const body = rows.map((r) => toDisplayRow(def, r, lk));
@@ -72,26 +81,6 @@ export function useEntityCrud({
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Export gagal");
     }
-  };
-
-  const onImport = async (file: File | undefined) => {
-    if (!file) return;
-    startTransition(async () => {
-      try {
-        const data = await readExcel(file);
-        const res = await importEntity(def.key, data);
-        if (!res.ok) return void toast.error(res.error);
-        const { inserted, errors } = res.data!;
-        toast.success(`Import: ${inserted} baris masuk`, {
-          description: errors.length ? `${errors.length} baris dilewati — ${errors.slice(0, 3).join("; ")}` : undefined,
-        });
-        router.refresh();
-      } catch {
-        toast.error("File tidak bisa dibaca");
-      } finally {
-        if (fileRef.current) fileRef.current.value = "";
-      }
-    });
   };
 
   const download = async (path: string, name?: string) => {
@@ -104,16 +93,9 @@ export function useEntityCrud({
 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={busy}>
+      <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
         <Upload /> Import
       </Button>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".xlsx,.xls,.csv"
-        className="hidden"
-        onChange={(e) => onImport(e.target.files?.[0])}
-      />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
@@ -132,9 +114,17 @@ export function useEntityCrud({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button size="sm" onClick={openCreate}>
-        <Plus /> Tambah
-      </Button>
+      {createHref ? (
+        <Button asChild size="sm">
+          <Link href={createHref}>
+            <Plus /> Tambah
+          </Link>
+        </Button>
+      ) : (
+        <Button size="sm" onClick={openCreate}>
+          <Plus /> Tambah
+        </Button>
+      )}
     </div>
   );
 
@@ -149,6 +139,7 @@ export function useEntityCrud({
         me={me}
         onSaved={() => router.refresh()}
       />
+      <ImportDialog def={def} lookups={lookups} open={importOpen} onOpenChange={setImportOpen} />
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

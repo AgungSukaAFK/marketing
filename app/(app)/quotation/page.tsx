@@ -1,7 +1,8 @@
-import { EntityPage } from "@/components/entity/entity-page";
 import { loadEntity } from "@/lib/data";
+import { QuotationView } from "./quotation-view";
 
 export default async function Page() {
-  const { rows, lookups, me } = await loadEntity("quotation");
-  return <EntityPage entity="quotation" rows={rows} lookups={lookups} me={me} />;
+  // daftar customer lengkap tidak perlu: form create/edit memakai pencarian (maks. 20)
+  const { rows, lookups, me } = await loadEntity("quotation", { customers: false });
+  return <QuotationView rows={rows} lookups={lookups} me={me} />;
 }

@@ -77,8 +77,8 @@ declare
   fc1    uuid := 'f0000000-0000-0000-0000-000000000001';
 begin
   insert into public.customers (id, tenant_id, owner, customer_code, sales_id, pt, pic, wa, email, jabatan, site, cuti, ultah, tinggal, note) values
-    (c1, t, adm, 'CUST-0001', budi, 'PT Kaltim Prima Coal', 'Andi Wijaya', '081234567890', 'andi@kpc.co.id', 'Procurement Mgr', 'Sangatta', '-', '12 Mar', 'Balikpapan', 'MCCB annual'),
-    (c2, t, adm, 'CUST-0002', rina, 'PT Adaro Indonesia',   'Siti Rahma',  '082345678901', 'siti@adaro.com', 'Maintenance Sup', 'Tanjung',  '-', '05 Jul', 'Banjarmasin', 'Conveyor focus');
+    (c1, t, adm, 'CUST-0001', budi, 'PT Kaltim Prima Coal', 'Andi Wijaya', '081234567890', 'andi@kpc.co.id', 'Procurement Mgr', 'Sangatta', '-', '1978-03-12', 'Balikpapan', 'MCCB annual'),
+    (c2, t, adm, 'CUST-0002', rina, 'PT Adaro Indonesia',   'Siti Rahma',  '082345678901', 'siti@adaro.com', 'Maintenance Sup', 'Tanjung',  '-', '1989-07-05', 'Banjarmasin', 'Conveyor focus');
 
   insert into public.sales_daily (tenant_id, owner, customer_id, type, status, note, absensi) values
     (t, budi, c1, 'Visit', 'Completed', 'Presentasi MCCB 400A', '08:00'),
@@ -87,28 +87,36 @@ begin
   insert into public.admin_daily (tenant_id, owner, customer_id, type, ref_no, dokumen, status) values
     (t, adm, c1, 'PO Input', 'PO/KPC/001', 'PO MCCB', 'Proses');
 
-  insert into public.pipeline (tenant_id, owner, customer_id, sales_id, stage, value, product, prob) values
-    (t, budi, c1, budi, 'Market Map',  250000000, 'MCCB 400A',   10),
-    (t, rina, c2, rina, 'Negotiation', 480000000, 'Roller HDPE', 70);
+  insert into public.pipeline (tenant_id, owner, customer_id, sales_id, stage, value, kategori) values
+    (t, budi, c1, budi, 'Market Map',  250000000, 'Retail'),
+    (t, rina, c2, rina, 'Negotiation', 480000000, 'Kontrak');
 
-  insert into public.sales_forecast (id, tenant_id, owner, customer_id, sales_id, part_no, deskripsi, periode, t_qty, t_rp, actual_qty, actual_rp, status, remarks) values
-    (fc1, t, budi, c1, budi, 'MCCB-400A-SCH', 'MCCB 400A',   '2026-09', 20,  200000000, 12,  120000000, 'On Track', 'Partial'),
-    (default, t, rina, c2, rina, 'RLR-HDPE-89', 'Roller 89mm', '2026-09', 100, 350000000, 100, 350000000, 'Achieved', 'Closed');
+  insert into public.sales_forecast (id, tenant_id, owner, customer_id, sales_id, part_no, deskripsi, kategori, periode, t_qty, t_rp, actual_qty, actual_rp, status, remarks) values
+    (fc1, t, budi, c1, budi, 'MCCB-400A-SCH', 'MCCB 400A',   'Electrical', '2026-09', 20,  200000000, 12,  120000000, 'On Track', 'Partial'),
+    (default, t, rina, c2, rina, 'RLR-HDPE-89', 'Roller 89mm', 'AC Part',    '2026-09', 100, 350000000, 100, 350000000, 'Achieved', 'Closed');
 
-  insert into public.quotation (tenant_id, owner, customer_id, quot_no, tgl_quot, tgl_exp, part, harga, qty, margin_p, po_status, loss, remarks) values
-    (t, budi, c1, 'QT-2026-001', '2026-08-01', '2026-09-01', 'MCCB 400A', 10000000, 20, 15, 'Pending', 0, 'Waiting');
+  insert into public.quotation (id, tenant_id, owner, customer_id, quot_no, kode_accurate, tgl_quot, tgl_exp, remarks) values
+    ('33333333-3333-3333-3333-333333333301', t, budi, c1, 'QT-2026-001', 'SQ.2026.08.00001', '2026-08-01', '2026-09-01', 'Waiting'),
+    ('33333333-3333-3333-3333-333333333302', t, rina, c2, 'QT-2026-002', null,               '2026-10-10', '2026-11-10', 'Nego harga roller');
+
+  insert into public.quotation_items (quotation_id, position, part, harga, qty, margin_p, status) values
+    ('33333333-3333-3333-3333-333333333301', 0, 'MCCB 400A',      10000000, 20,  15, 'Negosiasi'),
+    ('33333333-3333-3333-3333-333333333301', 1, 'Busbar 1000A',    4500000,  6,  12, 'Win'),
+    ('33333333-3333-3333-3333-333333333302', 0, 'Roller 89mm',      350000, 100, 18, 'Negosiasi'),
+    ('33333333-3333-3333-3333-333333333302', 1, 'Belt Cleaner',    7500000,  2,  20, 'Loss'),
+    ('33333333-3333-3333-3333-333333333302', 2, 'Impact Bed',     12000000,  1,  15, 'Draft');
 
   insert into public.forecast_trend (tenant_id, owner, forecast_ref, smt1_qty, smt2_qty, actual_2025, forecast_2026, alasan) values
     (t, budi, fc1, 50, 70, 60, 120, 'Crusher line');
 
-  insert into public.actual_vs_forecast (tenant_id, owner, customer_id, part_no, target_qty, actual_qty) values
-    (t, budi, c1, 'MCCB-400A-SCH', 20, 12);
+  insert into public.actual_vs_forecast (tenant_id, owner, customer_id, part_no, deskripsi, target_qty, actual_qty) values
+    (t, budi, c1, 'MCCB-400A-SCH', 'MCCB 400A', 20, 12);
 
   insert into public.documentation (tenant_id, owner, customer_id, nama, file_name) values
     (t, budi, c1, 'Datasheet MCCB.pdf', null);
 
   insert into public.refreshment (tenant_id, owner, tanggal, jenis, topik, durasi, peserta, nilai, ringkasan, status) values
-    (t, adm, '2026-08-20', 'Weekly Brainstorming', 'MCCB Knowledge', 30, 'budi.santoso', '-', 'Trip curve', 'Selesai');
+    (t, adm, '2026-08-20', 'Weekly Brainstorming', 'MCCB Knowledge', 30, array[budi, adm], '-', 'Trip curve', 'Selesai');
 
   insert into public.evaluation (tenant_id, owner, periode, sales_id, topik, deskripsi, skor, tindak, status) values
     (t, adm, '2026-08', budi, 'Visit Rate', 'Kunjungan -20%', 75, 'Tingkatkan jadwal', 'In Progress');

@@ -8,7 +8,9 @@ import { toast } from "sonner";
 import { saveEntity } from "@/app/actions/entity";
 import { AffixInput } from "@/components/form/affix-input";
 import { DatePicker } from "@/components/form/date-picker";
+import { FileDropzone } from "@/components/form/file-dropzone";
 import { MonthPicker } from "@/components/form/month-picker";
+import { MultiSelect } from "@/components/form/multi-select";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +46,15 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { STORAGE_BUCKET } from "@/lib/constants";
-import type { EntityDef, FieldDef, Row } from "@/lib/entities";
+import {
+  MAX_ATTACHMENTS,
+  MAX_ATTACHMENT_MB,
+  asAttachments,
+  type Attachment,
+  type EntityDef,
+  type FieldDef,
+  type Row,
+} from "@/lib/entities";
 import type { EntityLookups, Me } from "./types";
 
 type Values = Record<string, string>;
@@ -52,8 +62,9 @@ type Values = Record<string, string>;
 function initialValues(def: EntityDef, row: Row | null, me: Me): Values {
   const v: Values = {};
   for (const f of def.fields) {
-    if (f.type === "file") continue;
-    if (row) v[f.name] = row[f.name] == null ? "" : String(row[f.name]);
+    if (f.type === "file" || f.type === "files") continue;
+    if (row && Array.isArray(row[f.name])) v[f.name] = row[f.name].join(",");
+    else if (row) v[f.name] = row[f.name] == null ? "" : String(row[f.name]);
     else if (typeof f.initial === "function") v[f.name] = String(f.initial(me));
     else v[f.name] = f.initial == null ? "" : String(f.initial);
   }
@@ -95,6 +106,16 @@ function EntityFormBody({
 }: FormProps) {
   const [pending, startTransition] = useTransition();
   const [files, setFiles] = useState<Record<string, File | null>>({});
+  // field "files": lampiran tersimpan yang dipertahankan + file baru
+  const [kept, setKept] = useState<Record<string, Attachment[]>>(() =>
+    Object.fromEntries(
+      def.fields
+        .filter((f) => f.type === "files")
+        .map((f) => [f.name, asAttachments(row?.[f.name])]),
+    ),
+  );
+  const [newFiles, setNewFiles] = useState<Record<string, File[]>>({});
+  const [progress, setProgress] = useState<string | null>(null);
   const [defaults] = useState(() => initialValues(def, row, me));
 
   const form = useForm<Values>({
@@ -123,19 +144,33 @@ function EntityFormBody({
       const raw: Record<string, unknown> = { ...form.getValues() };
       const supabase = createClient();
       const uploaded: string[] = [];
+      const upload = async (file: File) => {
+        const path = `${me.tenant_id}/${def.table}/${crypto.randomUUID()}-${safeName(file.name)}`;
+        const { error } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(path, file, { contentType: file.type || undefined });
+        if (error) throw new Error(`Upload ${file.name} gagal: ${error.message}`);
+        uploaded.push(path);
+        return path;
+      };
       try {
         for (const f of def.fields) {
+          if (f.type === "files") {
+            const list = [...(kept[f.name] ?? [])];
+            const pending = newFiles[f.name] ?? [];
+            for (const [i, file] of pending.entries()) {
+              setProgress(`Mengunggah ${i + 1}/${pending.length}…`);
+              list.push({ path: await upload(file), name: file.name, size: file.size });
+            }
+            raw[f.name] = list;
+            continue;
+          }
           const file = f.type === "file" ? files[f.name] : null;
           if (!file || !f.pathField) continue;
-          const path = `${me.tenant_id}/${def.table}/${crypto.randomUUID()}-${safeName(file.name)}`;
-          const { error } = await supabase.storage
-            .from(STORAGE_BUCKET)
-            .upload(path, file);
-          if (error) throw new Error(`Upload gagal: ${error.message}`);
-          uploaded.push(path);
-          raw[f.pathField] = path;
+          raw[f.pathField] = await upload(file);
           if (f.nameField) raw[f.nameField] = file.name;
         }
+        setProgress(null);
         const res = await saveEntity(def.key, row?.id ?? null, raw);
         if (!res.ok) throw new Error(res.error);
         toast.success(res.message ?? "Disimpan");
@@ -145,6 +180,8 @@ function EntityFormBody({
         if (uploaded.length)
           await supabase.storage.from(STORAGE_BUCKET).remove(uploaded);
         toast.error(e instanceof Error ? e.message : "Gagal menyimpan");
+      } finally {
+        setProgress(null);
       }
     }),
   );
@@ -216,6 +253,21 @@ function EntityFormBody({
           />
         );
         break;
+      case "users":
+        control = (
+          <MultiSelect
+            id={`f_${f.name}`}
+            value={(values[f.name] ?? "").split(",").filter(Boolean)}
+            onChange={(ids) => setValue(ids.join(","))}
+            invalid={!!err}
+            placeholder="-- Pilih user --"
+            options={lookups.profiles.map((p) => ({
+              value: p.id,
+              label: `${p.name} (${p.username})`,
+            }))}
+          />
+        );
+        break;
       case "textarea":
         control = (
           <Textarea
@@ -273,6 +325,22 @@ function EntityFormBody({
           </>
         );
         break;
+      case "files":
+        control = (
+          <FileDropzone
+            id={`f_${f.name}`}
+            existing={kept[f.name] ?? []}
+            onExistingChange={(a) => setKept((s) => ({ ...s, [f.name]: a }))}
+            files={newFiles[f.name] ?? []}
+            onFilesChange={(l) => setNewFiles((s) => ({ ...s, [f.name]: l }))}
+            maxSizeMB={MAX_ATTACHMENT_MB}
+            maxFiles={MAX_ATTACHMENTS}
+            accept={f.accept}
+            invalid={!!err}
+            disabled={pending}
+          />
+        );
+        break;
       case "number":
         control = f.money ? (
           <CurrencyInput
@@ -318,7 +386,7 @@ function EntityFormBody({
       <Field
         key={f.name}
         data-invalid={!!err}
-        className={f.type === "textarea" ? "sm:col-span-2" : undefined}
+        className={f.type === "textarea" || f.type === "files" ? "sm:col-span-2" : undefined}
       >
         {label}
         {control}
@@ -392,7 +460,7 @@ function EntityFormBody({
         </Button>
         <Button type="submit" form="entity-form" disabled={pending}>
           {pending && <Loader2 className="animate-spin" />}
-          {pending ? "Menyimpan…" : "Simpan"}
+          {pending ? (progress ?? "Menyimpan…") : "Simpan"}
         </Button>
       </DialogFooter>
     </>
